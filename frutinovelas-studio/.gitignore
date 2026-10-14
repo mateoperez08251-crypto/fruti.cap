@@ -1,0 +1,100 @@
+# ── Entornos y dependencias ──────────────────────────────
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# ── Secretos y configuración local ───────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.json
+secrets/
+claude_desktop_config.local.json
+
+# ── Bases de datos y datos de usuario ────────────────────
+*.sqlite
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+*.db
+data/
+frutinovelas-data/
+backups/
+exports/
+
+# ── Medios pesados y datos de capítulos ──────────────────
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.avi
+*.wav
+*.flac
+*.mp3
+*.m4a
+*.aac
+*.zip
+chapters/
+capitulos/
+
+# ── Modelos (nunca en el repositorio) ────────────────────
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.gguf
+*.onnx
+models/
+!src/frutinovelas/models/
+
+# ── Markdown privado (guiones, continuidad, notas) ───────
+# Solo se versionan README.md y la documentación de docs/.
+*.md
+!/README.md
+!/docs/
+!/docs/**/*.md
+
+# ── Fixtures pequeños permitidos explícitamente ──────────
+!tests/fixtures/**
+
+# ── Pruebas, cobertura y herramientas ────────────────────
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+frontend/playwright/.cache/
+
+# ── Logs y temporales ────────────────────────────────────
+*.log
+logs/
+tmp/
+*.tmp
+*.partial
+
+# ── Editores y sistema ───────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini

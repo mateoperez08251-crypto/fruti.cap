@@ -1,0 +1,26 @@
+# Normaliza finales de línea: LF en el repositorio para que Windows y Linux
+# (CI) vean el mismo contenido. Evita los avisos "LF will be replaced by CRLF".
+* text=auto eol=lf
+
+# Scripts de Windows necesitan CRLF.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binarios: nunca convertir.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.ico binary
+*.mp4 binary
+*.webm binary
+*.mov binary
+*.wav binary
+*.mp3 binary
+*.flac binary
+*.zip binary
+*.sqlite3 binary
+*.woff binary
+*.woff2 binary

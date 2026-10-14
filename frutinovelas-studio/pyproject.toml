@@ -1,0 +1,66 @@
+[project]
+name = "frutinovelas-studio"
+version = "0.1.0"
+description = "FRUTINOVELAS Studio: preparación de capítulos, generación con ComfyUI, revisión, montaje y servidor MCP."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "Proprietary" }
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.5",
+    "sqlalchemy>=2.0.30",
+    "alembic>=1.13",
+    "httpx>=0.27",
+    "websockets>=13",
+    "python-multipart>=0.0.9",
+    "Pillow>=10.4",
+    "platformdirs>=4.2",
+    "mcp[cli]>=2.0,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "respx>=0.21",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+frutinovelas-api = "frutinovelas.api:main"
+frutinovelas-worker = "frutinovelas.worker:main"
+frutinovelas-mcp = "frutinovelas.mcp_server:main"
+frutinovelas-doctor = "frutinovelas.doctor:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/frutinovelas"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"migrations" = "frutinovelas/_migrations"
+
+[tool.uv]
+package = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S603", "S604"]
+ignore = ["E501", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S603", "B011"]

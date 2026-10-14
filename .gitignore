@@ -1,0 +1,10 @@
+# Markdown privado (especificaciones, guiones, continuidad, notas).
+# Solo se versionan README.md y docs/ del programa (reglas en frutinovelas-studio/.gitignore).
+*.md
+
+# Sistema y editores
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/*
+.idea/
