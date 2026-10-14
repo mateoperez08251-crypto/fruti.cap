@@ -40,8 +40,20 @@ class Settings(BaseSettings):
 
     mcp_host: str = Field(default="127.0.0.1", validation_alias="FRUTINOVELAS_MCP_HOST")
     mcp_port: int = Field(default=8766, validation_alias="FRUTINOVELAS_MCP_PORT")
+    # Token que deben presentar los clientes remotos del endpoint Streamable HTTP.
     mcp_token: str | None = Field(default=None, validation_alias="FRUTINOVELAS_MCP_TOKEN")
-    mcp_image_max_side: int = Field(default=768, validation_alias="FRUTINOVELAS_MCP_IMAGE_MAX_SIDE")
+    # Token con el que el adaptador MCP se identifica ante el backend. El backend
+    # reconoce así al actor MCP y le aplica su política (modo y proyecto) por sí mismo.
+    mcp_backend_token: str | None = Field(default=None, validation_alias="FRUTINOVELAS_MCP_BACKEND_TOKEN")
+    # Restringe todas las lecturas, imágenes y escrituras MCP a un proyecto.
+    mcp_project_id: str | None = Field(default=None, validation_alias="FRUTINOVELAS_MCP_PROJECT_ID")
+    # read_only | read_write
+    mcp_access_mode: str = Field(default="read_write", validation_alias="FRUTINOVELAS_MCP_ACCESS_MODE")
+    mcp_preview_max_edge: int = Field(default=1280, validation_alias="FRUTINOVELAS_MCP_PREVIEW_MAX_EDGE")
+    mcp_max_page_size: int = Field(default=100, validation_alias="FRUTINOVELAS_MCP_MAX_PAGE_SIZE")
+    mcp_max_frames: int = Field(default=5, validation_alias="FRUTINOVELAS_MCP_MAX_FRAMES")
+    mcp_script_section_chars: int = Field(default=12000, validation_alias="FRUTINOVELAS_MCP_SCRIPT_SECTION_CHARS")
+    mcp_backend_timeout: float = Field(default=30.0, validation_alias="FRUTINOVELAS_MCP_BACKEND_TIMEOUT")
 
     comfyui_base_url: str = Field(
         default="http://127.0.0.1:8188",
