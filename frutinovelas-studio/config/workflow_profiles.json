@@ -1,0 +1,75 @@
+{
+  "schema_version": "1.0",
+  "note": "Perfiles de flujo para FRUTINOVELAS Studio. Los node_id provienen del JSON del usuario y se comprueban contra la exportación API real (class_type incluido) antes de usarse.",
+  "profiles": [
+    {
+      "key": "h3_equilibrado_9x16",
+      "name": "H3 equilibrado 9:16 (inicio / inicio+final)",
+      "kind": "video_generation",
+      "engine": "MiniMax H3 FL2VA",
+      "workflow_ui_file": "workflows/H3_EQUILIBRADO_9x16_INICIO_FINAL.ui.json",
+      "workflow_ui_sha256": "2153a2f6d289aaeb38882c4eb364a06ef3b039ad93addc4347b0473340c9e547",
+      "workflow_api_files": {
+        "fl2va": "H3_USUARIO_INICIO_FINAL.api.json",
+        "i2va": "H3_USUARIO_SOLO_INICIO.api.json"
+      },
+      "status": "pendiente_prueba_real",
+      "mapping": {
+        "start_image": {"node_id": "1", "input": "image", "class_type": "LoadImage"},
+        "end_image": {"node_id": "30", "input": "image", "class_type": "LoadImage"},
+        "positive_prompt": {"node_id": "9", "input": "prompt", "class_type": "MiniMaxH3ImageToVideo"},
+        "negative_prompt": null,
+        "seed": [{"node_id": "12", "input": "noise_seed", "class_type": "RandomNoise"}],
+        "duration": {"node_id": "28", "input": "value", "class_type": "PrimitiveFloat", "unit": "seconds"},
+        "width": {"node_id": "9", "input": "width", "class_type": "MiniMaxH3ImageToVideo"},
+        "height": {"node_id": "9", "input": "height", "class_type": "MiniMaxH3ImageToVideo"},
+        "steps": {"node_id": "14", "input": "steps", "class_type": "BasicScheduler"},
+        "filename_prefix": {"node_id": "20", "input": "filename_prefix", "class_type": "SaveVideo"},
+        "outputs": [{"node_id": "20", "class_type": "SaveVideo", "adapter": "comfy_save_video"}]
+      },
+      "modes": {
+        "fl2va": {"requires": ["start_image", "end_image"]},
+        "i2va": {
+          "requires": ["start_image"],
+          "end_image_disable": {
+            "strategy": "remove_link",
+            "consumer": {"node_id": "9", "input": "last_frame"},
+            "remove_nodes": ["30"]
+          }
+        }
+      },
+      "duration_rule": {
+        "fps": 24,
+        "grid_step": 17,
+        "grid_offset": 5,
+        "min_frames": 5,
+        "rounding": "round_then_snap_up",
+        "formula": "max(5, round(s*24)) + (5 - max(5, round(s*24)) % 17) % 17",
+        "published_min_seconds": 4,
+        "published_max_seconds": 15
+      },
+      "image_handling": {
+        "start_image": "El nodo H3 estira la imagen inicial al canvas sin recortar: prepararla en 9:16 exacto.",
+        "end_image": "El nodo H3 recorta al centro la imagen final para cubrir el canvas."
+      },
+      "defaults": {"width": 576, "height": 1024, "steps": 20, "fps": 24, "duration_seconds": 10, "seed_mode": "random"},
+      "locked": ["fps", "sampler_name", "scheduler", "denoise", "unet_name", "clip_name", "vae_name"],
+      "expected_values": {
+        "1": {"class_type": "LoadImage"},
+        "5": {"class_type": "UNETLoader", "unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors"},
+        "6": {"class_type": "CLIPLoader", "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"},
+        "7": {"class_type": "VAELoader", "vae_name": "minimax_h3_video_vae_int8_convrot.safetensors"},
+        "8": {"class_type": "VAELoader", "vae_name": "minimax_h3_audio_vae_fp32.safetensors"},
+        "9": {"class_type": "MiniMaxH3ImageToVideo", "width": 576, "height": 1024},
+        "12": {"class_type": "RandomNoise"},
+        "13": {"class_type": "KSamplerSelect", "sampler_name": "res_multistep"},
+        "14": {"class_type": "BasicScheduler", "scheduler": "simple", "steps": 20, "denoise": 1},
+        "19": {"class_type": "CreateVideo", "fps": 24},
+        "20": {"class_type": "SaveVideo"},
+        "28": {"class_type": "PrimitiveFloat"},
+        "29": {"class_type": "ComfyMathExpression"},
+        "30": {"class_type": "LoadImage"}
+      }
+    }
+  ]
+}

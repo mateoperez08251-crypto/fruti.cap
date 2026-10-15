@@ -62,6 +62,9 @@ capitulos/
 models/
 !src/frutinovelas/models/
 
+# ── Flujos API descargados de cada sesión de Colab ──────
+workflows/api/
+
 # ── Markdown privado (guiones, continuidad, notas) ───────
 # Solo se versionan README.md y la documentación de docs/.
 *.md
