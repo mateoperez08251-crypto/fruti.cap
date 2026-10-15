@@ -11,6 +11,7 @@ from frutinovelas.config import get_settings
 from frutinovelas.db import session_factory
 from frutinovelas.models import GenerationJob
 from frutinovelas.services.chapter_render import assemble, ffmpeg_tools
+from frutinovelas.services.comfy import ComfyError
 from frutinovelas.services.image_generation import finish_automatic_image, video_request_id
 from frutinovelas.worker import GenerationWorker
 from test_character_images import QwenRemote, setup_cast
@@ -22,6 +23,7 @@ def qwen(monkeypatch):
     remote = QwenRemote()
     for route in ("generation", "images", "renders"):
         monkeypatch.setattr(f"frutinovelas.routes.{route}.ComfyClient", remote.client)
+    monkeypatch.setattr("frutinovelas.services.chapter_render.ffmpeg_tools", lambda: ("ffmpeg", "ffprobe"))
     return remote
 
 
@@ -224,7 +226,10 @@ def test_chapter_stops_if_future_scene_changes(client, qwen, monkeypatch):
 def test_ffmpeg_merges_actual_audio_and_silent_clips(data_dir):
     settings = get_settings()
     settings.ensure_dirs()
-    ffmpeg, probe = ffmpeg_tools()
+    try:
+        ffmpeg, probe = ffmpeg_tools()
+    except ComfyError:
+        pytest.skip("FFmpeg/ffprobe are optional locally; CI installs both for this integration test.")
     paths = []
     for i in range(2):
         path = settings.tmp_dir / f"clip-{i}.mp4"
@@ -257,3 +262,18 @@ def test_ffmpeg_merges_actual_audio_and_silent_clips(data_dir):
     assert (video["width"], video["height"]) == (576, 1024)
     assert 0.95 <= float(info["format"]["duration"]) <= 1.2
     assert all(p.is_file() for p in paths)
+
+
+def test_missing_ffmpeg_blocks_chapter_before_gpu_submission(client, qwen, monkeypatch):
+    connect(client)
+    s, _, chapter = setup_cast(client, scene(client))
+
+    def missing():
+        raise ComfyError("El montaje automático necesita FFmpeg y ffprobe instalados en este PC.")
+
+    monkeypatch.setattr("frutinovelas.services.chapter_render.ffmpeg_tools", missing)
+    response = request_run(client, chapter, [s])
+    assert response.status_code == 422
+    assert "FFmpeg" in response.json()["detail"]
+    assert qwen.posts == []
+    assert client.get(f"/api/v1/scenes/{s['id']}/image-generations").json() == []
