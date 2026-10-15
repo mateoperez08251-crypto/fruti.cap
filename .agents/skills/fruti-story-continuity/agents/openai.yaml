@@ -1,0 +1,4 @@
+interface:
+  display_name: "fruti-story-continuity"
+  short_description: "Guion y continuidad de las frutinovelas"
+  default_prompt: "Usa $fruti-story-continuity para preparar y revisar la escena de FRUTINOVELAS con mis referencias."

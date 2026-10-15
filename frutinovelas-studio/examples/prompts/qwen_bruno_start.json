@@ -1,0 +1,11 @@
+{
+  "profile": "qwen2512_t2i",
+  "mode": "T2I",
+  "subject": "Bruno, an adult anthropomorphic avocado with textured green skin, swept dark hair, thick brows and a dark shirt, seated behind the steering wheel.",
+  "composition": "One vertical 9:16 medium interior frame from the passenger side. Show face, forearms, both hands and horn pad, leaving clearance for the right hand trajectory.",
+  "environment": "A believable parked sedan cabin beside a coastal ice-cream shop. Upholstery, glass, curb and distant palms have consistent scale and perspective.",
+  "lighting": "Warm low sunset through the side window, soft cabin fill, gentle contact shadows where fingers meet the wheel and torso meets the seat.",
+  "materials": "Detailed avocado pores with restrained highlights, matte woven shirt, worn leather wheel and plausible glass reflections.",
+  "expression": "Attentive eyes directed toward the shop, mildly gathered brows, closed relaxed lips; contained impatience.",
+  "starting_pose": "Both hands rest on the wheel rim before the horn press. The seat belt is fastened; shoulders rest against the seat."
+}

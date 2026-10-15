@@ -1,0 +1,4 @@
+interface:
+  display_name: "fruti-prompt-review"
+  short_description: "Revisar prompts y resultados por escena"
+  default_prompt: "Usa $fruti-prompt-review para preparar y revisar la escena de FRUTINOVELAS con mis referencias."

@@ -7,6 +7,7 @@ import { ConfirmDialog } from './Dialogs'
 import { ImageDrop, Lightbox } from './ImageDrop'
 import { useToast } from './Toast'
 import { GenerationPanel } from './GenerationPanel'
+import { PromptCheck } from './PromptCheck'
 
 type Draft = {
   title: string
@@ -194,7 +195,7 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
           <TriangleAlert size={16} />
           <span>
             Inicio ({draft.start?.width}×{draft.start?.height}) y final ({draft.end?.width}×{draft.end?.height}) tienen
-            proporciones distintas. No se recortarán automáticamente; conviene preparar ambas con el mismo formato.
+            proporciones distintas. Al generar se ajustan al centro a 576×1024; prepara ambas en 9:16 para evitar perder detalles importantes.
           </span>
         </div>
       )}
@@ -224,6 +225,9 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
         </div>
       )}
 
+      <PromptCheck input={{ prompt: draft.prompt, duration_seconds: duration,
+        has_start_image: Boolean(draft.start), has_end_image: Boolean(draft.end) }} />
+
       <div className="row">
         <div className="field">
           <label htmlFor="scene-duration">Duración solicitada (segundos)</label>
@@ -236,7 +240,7 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
             aria-invalid={!durationOk}
             style={!durationOk ? { borderColor: 'var(--danger)' } : undefined}
           />
-          <span className="hint">{durationOk ? 'Entre 0,5 y 60 s.' : 'Introduce un valor entre 0,5 y 60.'}</span>
+          <span className="hint">{durationOk ? 'Puedes guardar 0,5–60 s; este flujo H3 genera únicamente 4–15 s.' : 'Introduce un valor entre 0,5 y 60.'}</span>
         </div>
         <div className="field">
           <label htmlFor="scene-seed-mode">Semilla</label>

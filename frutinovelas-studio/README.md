@@ -45,7 +45,7 @@ repositorio. El token se cifra con una clave local (`comfy_credentials.key`); in
 todo ese directorio si haces una copia de seguridad. No subas la clave ni los datos a Git.
 
 Esta entrega añade generación individual de video desde imágenes ya elegidas. La
-generación de imágenes con Qwen, MCP y el montaje automático de capítulos siguen siendo
+generación de imágenes con Qwen, el control de escenas mediante MCP y el montaje automático de capítulos siguen siendo
 integraciones separadas. Los scripts de RunPod y sus modelos se conservan.
 
 ## Comprobar los cambios
@@ -59,3 +59,25 @@ npm.cmd --prefix frontend run lint
 
 Las pruebas de generación simulan el gateway: cubren autenticación, migración,
 versiones, descarga, duplicados y recuperación. No miden calidad ni rendimiento GPU.
+
+
+## Dirección de prompts y skills
+
+El editor incluye **Revisar prompt H3**: estructura, referencias y duración, sin guardar ni generar.
+Hay cuatro skills para asistentes en `../.agents/skills/`, un compilador validable para H3 y Qwen,
+cinco ejemplos y una guía de continuidad basada en el chat compartido. Las reglas sirven para
+cualquier escena; el preset `frutinovelas` añade tus preferencias y `general` permite otros sujetos
+y estilos. La historia de la heladería se consulta solo cuando corresponde.
+
+```powershell
+py -3 -m uv run frutinovelas-prompts h3 examples/prompts/bruno_horn_i2va.json
+py -3 -m uv run frutinovelas-prompts image examples/prompts/qwen_edit_cocardo.json
+```
+
+El comando `frutinovelas-mcp` sirve cuatro herramientas **locales por stdio**, recursos y el prompt
+`direct_scene`. `get_directing_guidance` permite al asistente leer las skills y preferencias antes
+de redactar; las otras tres herramientas preparan y revisan prompts. No conecta automáticamente
+ChatGPT web, no modifica escenas y no genera video. Las guías no entrenan al modelo ni crean
+memoria automática entre chats.
+Ver [uso completo](docs/PROMPT_STUDIO.md), [instrucciones para ChatGPT](docs/CHATGPT_DIRECTOR.md),
+[compatibilidad](docs/MODEL_COMPATIBILITY.md) y [fuentes consultadas](docs/PROMPT_RESEARCH.md).

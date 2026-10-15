@@ -40,6 +40,19 @@ export type Asset = {
 
 export type SceneStatus = 'sin_imagen' | 'sin_prompt' | 'lista'
 
+export type PromptIssue = {
+  severity: 'error' | 'warning' | 'info'
+  code: string
+  message: string
+}
+
+export type PromptCheckInput = {
+  prompt: string
+  duration_seconds: number
+  has_start_image: boolean
+  has_end_image: boolean
+}
+
 export type SceneParameters = {
   seed_mode?: 'random' | 'fixed'
   seed?: number | null
@@ -145,6 +158,7 @@ const json = (method: string, data: unknown): RequestInit => ({
 })
 
 export const api = {
+  checkPrompt: (data: PromptCheckInput) => request<PromptIssue[]>('/prompts/lint', json('POST', data)),
   status: () => request<SystemStatus>('/system/status'),
   comfyConnection: () => request<ComfyConnection>('/comfy/connection'),
   saveComfyConnection: (url: string, token: string) =>

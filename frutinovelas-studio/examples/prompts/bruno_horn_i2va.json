@@ -1,0 +1,62 @@
+{
+  "profile": "h3_balanced_default",
+  "mode": "I2VA",
+  "duration_seconds": 5,
+  "has_start_image": true,
+  "has_end_image": false,
+  "visual_style": "Cinematic 3D CG animation, vertical 9:16, matching the supplied reference.",
+  "characters": [
+    {
+      "key": "bruno",
+      "description": "Bruno, the adult avocado driver in a dark shirt and a fastened seat belt",
+      "voice": "a low firm adult male voice speaking clear Latin American Spanish"
+    }
+  ],
+  "lighting": "Warm sunset enters from the established side window. Soft occlusion follows the hands on the wheel; reflections remain consistent with the parked car.",
+  "background": "The sedan is parked. The shop and palms outside stay fixed; a few distant leaves shift gently in the breeze.",
+  "continuity": [
+    "Bruno stays in the driver seat. Darío is outside the frame near the shop.",
+    "The left hand holds the rim; the right hand performs the horn press."
+  ],
+  "shots": [
+    {
+      "start": 0,
+      "composition": "A medium interior view shows Bruno, both hands and the horn pad in the reference framing.",
+      "camera": "The camera remains fixed relative to the parked cabin.",
+      "beats": [
+        {
+          "start": 0,
+          "end": 0.6,
+          "action": "Bruno looks toward the shop; his brows draw together slightly. His right hand releases the rim and approaches the horn pad."
+        },
+        {
+          "start": 0.6,
+          "end": 0.95,
+          "action": "His right palm presses the central pad once, then releases it. The wheel stays straight.",
+          "sound": "One short horn beep starts at visible pressure and stops at release."
+        },
+        {
+          "start": 0.95,
+          "end": 1.2,
+          "action": "His right hand begins returning to the rim after the beep has ended."
+        },
+        {
+          "start": 1.2,
+          "end": 3.9,
+          "action": "Bruno angles his face toward Darío outside the window, eyebrows mildly tense, jaw moving naturally with his line.",
+          "speaker": "bruno",
+          "dialogue": "Darío, vamos tarde. Apresúrate.",
+          "delivery": "with contained urgency, projecting toward the nearby shop"
+        },
+        {
+          "start": 3.9,
+          "end": 5,
+          "action": "His lips close. Both hands rest on the rim as he watches the shop and waits."
+        }
+      ]
+    }
+  ],
+  "end_state": "Bruno remains seated and expectant, with both hands on the wheel and the car still parked.",
+  "overall_soundscape": "Quiet engine idle and subdued coastal street ambience persist. The single brief horn beep ends before Bruno speaks.",
+  "non_diegetic_music": "N/A"
+}

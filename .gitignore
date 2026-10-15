@@ -1,6 +1,9 @@
 # Markdown privado (especificaciones, guiones, continuidad, notas).
-# Solo se versionan README.md y docs/ del programa (reglas en frutinovelas-studio/.gitignore).
+# También se versionan las instrucciones del asistente y las skills del proyecto.
+# README.md y docs/ del programa tienen reglas en frutinovelas-studio/.gitignore.
 *.md
+!/AGENTS.md
+!/.agents/skills/**/SKILL.md
 
 # Sistema y editores
 .DS_Store

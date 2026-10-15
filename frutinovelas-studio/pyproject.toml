@@ -34,6 +34,7 @@ frutinovelas-api = "frutinovelas.api:main"
 frutinovelas-worker = "frutinovelas.worker:main"
 frutinovelas-mcp = "frutinovelas.mcp_server:main"
 frutinovelas-doctor = "frutinovelas.doctor:main"
+frutinovelas-prompts = "frutinovelas.prompts:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -44,6 +45,7 @@ packages = ["src/frutinovelas"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "migrations" = "frutinovelas/_migrations"
+"docs" = "frutinovelas/_prompt_guides"
 
 [tool.uv]
 package = true

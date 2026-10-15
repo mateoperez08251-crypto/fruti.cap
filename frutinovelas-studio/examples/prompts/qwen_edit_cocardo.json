@@ -1,0 +1,20 @@
+{
+  "profile": "qwen_edit2511_fp8mixed",
+  "mode": "EDIT",
+  "has_reference_image": true,
+  "subject": "Cocardo, the established ice-cream vendor in the supplied reference.",
+  "composition": "Keep the existing counter-side view, crop and character placement.",
+  "environment": "Keep the established shop, counter, serving objects and surrounding perspective.",
+  "lighting": "Preserve the established sunset direction and soft counter shadows. The small sweat bead catches the same existing light.",
+  "materials": "Preserve the reference fruit surface, clothing texture and metal scoop finish.",
+  "expression": "Inner brows tense slightly, the eyes glance toward the rear doorway, lips press into a strained asymmetric closed smile, with one small sweat bead at the temple.",
+  "starting_pose": "Keep the current hand placements, scoop and body posture.",
+  "preserve": [
+    "Character identity and species from the reference",
+    "Clothes, hands, objects, framing and light direction"
+  ],
+  "changes": [
+    "Replace the cheerful expression with restrained worry",
+    "Add one subtle sweat bead at the temple"
+  ]
+}
