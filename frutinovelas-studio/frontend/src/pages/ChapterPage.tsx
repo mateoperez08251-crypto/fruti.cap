@@ -30,16 +30,19 @@ function DocEditor({ chapter, field, title, hint }: { chapter: Chapter; field: '
     onError: (e: ApiError) => toast.error(e.message),
   })
 
-  // Mantiene la revisión al día si otra pestaña del editor guardó el capítulo.
-  useEffect(() => {
-    if (chapter.revision > rev && !dirty) {
+  // Otra parte del programa guardó el capítulo (p. ej. renombrar). Si ESTE documento no cambió en
+  // el servidor se adopta la nueva revisión; si cambió, se conserva la antigua para que guardar dé 409.
+  const [seenRev, setSeenRev] = useState(chapter.revision)
+  if (chapter.revision !== seenRev) {
+    setSeenRev(chapter.revision)
+    if (chapter.revision > rev && chapter[field] === saved) {
+      setRev(chapter.revision)
+    } else if (chapter.revision > rev && !dirty) {
       setRev(chapter.revision)
       setText(chapter[field])
       setSaved(chapter[field])
-    } else if (chapter.revision > rev) {
-      setRev(chapter.revision)
     }
-  }, [chapter, field, rev, dirty])
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

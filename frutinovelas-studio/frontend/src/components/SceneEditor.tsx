@@ -2,9 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowRight, ChevronRight, Copy, History, Info, Loader2, RotateCcw, Save, Trash2, TriangleAlert } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, ApiError, type Asset, type Scene } from '../api'
+import { STATUS_LABEL } from '../labels'
 import { ConfirmDialog } from './Dialogs'
 import { ImageDrop, Lightbox } from './ImageDrop'
-import { STATUS_LABEL } from './SceneList'
 import { useToast } from './Toast'
 
 type Draft = {
@@ -49,14 +49,17 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
   const [showHistory, setShowHistory] = useState(false)
 
   // Si la escena cambia desde fuera (otro guardado, MCP) y no hay cambios locales, sincroniza.
+  // Con cambios locales se conserva la revisión base, así el guardado responde 409 en vez de sobrescribir.
   const clean = useMemo(() => fromScene(base), [base])
   const dirty = JSON.stringify(draft) !== JSON.stringify(clean)
-  useEffect(() => {
-    if (scene.revision !== base.revision && !dirty) {
+  const [seenRevision, setSeenRevision] = useState(scene.revision)
+  if (scene.revision !== seenRevision) {
+    setSeenRevision(scene.revision)
+    if (scene.revision > base.revision && !dirty) {
       setBase(scene)
       setDraft(fromScene(scene))
     }
-  }, [scene, base.revision, dirty])
+  }
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange])
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft((d) => ({ ...d, [k]: v }))
