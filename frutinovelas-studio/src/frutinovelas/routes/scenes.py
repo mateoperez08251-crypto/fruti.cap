@@ -105,7 +105,11 @@ def duplicate_scene(scene_id: str, session: Session = Depends(get_session)):
 
 @router.delete("/scenes/{scene_id}", status_code=204, responses=ERRORS)
 def delete_scene(scene_id: str, session: Session = Depends(get_session)):
-    svc.delete_scene(session, _scene(session, scene_id))
+    try:
+        svc.delete_scene(session, _scene(session, scene_id))
+    except svc.ActiveGenerationConflict as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     session.commit()
 
 

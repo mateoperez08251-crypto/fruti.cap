@@ -54,7 +54,9 @@ def test_comfyui_ok_reports_version_and_vram():
             200,
             json={
                 "system": {"comfyui_version": "0.9.9"},
-                "devices": [{"name": "cuda:0 NVIDIA L4", "vram_total": 24 * 1024**3, "vram_free": 20 * 1024**3}],
+                "devices": [
+                    {"name": "cuda:0 NVIDIA L4", "vram_total": 24 * 1024**3, "vram_free": 20 * 1024**3}
+                ],
             },
         )
     )
@@ -88,3 +90,51 @@ def test_main_json_output_and_exit_code(tmp_path, monkeypatch, capsys):
     assert code == 1  # FFmpeg ausente es bloqueante
     assert payload["summary"]["falla"] >= 1
     assert "token-super-secreto" not in out
+
+
+def test_mask_url_invalid_port_and_ipv6():
+    assert doctor.mask_url("https://user:secret@example.com:bad") == "<url no válida>"
+    assert doctor.mask_url("http://[::1]:8188") == "http://[::1]:8188"
+
+
+@respx.mock
+def test_doctor_handles_non_comfy_json_and_malformed_devices():
+    route = respx.get("http://comfy.test/system_stats")
+    for payload in ([], None, {"ok": True}, {"system": None}):
+        route.mock(return_value=httpx.Response(200, json=payload))
+        assert doctor.check_comfyui("http://comfy.test", 1)[0].status == doctor.WARN
+    route.mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "system": {"comfyui_version": "0.40.0"},
+                "devices": [None, {"name": "test", "vram_total": "unknown"}],
+            },
+        )
+    )
+    assert doctor.check_comfyui("http://comfy.test", 1)[0].status == doctor.OK
+
+
+def test_doctor_invalid_url_and_timeout_does_not_crash():
+    for url, timeout in [
+        ("http://test:bad", 1),
+        ("file:///tmp/test", 1),
+        ("http://test", 0),
+        ("http://test", float("nan")),
+    ]:
+        assert doctor.check_comfyui(url, timeout)[0].status == doctor.WARN
+
+
+@respx.mock
+def test_doctor_ignores_environment_proxy(monkeypatch):
+    monkeypatch.setenv("ALL_PROXY", "socks5://invalid.example:1080")
+    respx.get("http://comfy.test/system_stats").mock(return_value=httpx.Response(200, json={"system": {}}))
+    assert doctor.check_comfyui("http://comfy.test", 1)[0].status == doctor.OK
+
+
+def test_sqlite_unwritable_directory_reports_failure(tmp_path):
+    settings = _settings(tmp_path)
+    settings.resolved_data_dir.mkdir(parents=True)
+    settings.tmp_dir.write_text("not a directory")
+    checks = doctor.check_sqlite(settings)
+    assert checks[0].status == doctor.FAIL

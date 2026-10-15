@@ -24,6 +24,8 @@ el token se exige igualmente en todas las rutas salvo ``/healthz``.
 from __future__ import annotations
 
 import argparse
+import asyncio
+import hashlib
 import hmac
 import json
 import logging
@@ -35,7 +37,7 @@ from collections import defaultdict, deque
 from pathlib import Path
 
 # pyrefly: ignore [missing-import]
-from aiohttp import ClientSession, ClientTimeout, WSMsgType, web
+from aiohttp import ClientConnectionError, ClientError, ClientSession, ClientTimeout, WSMsgType, web
 
 log = logging.getLogger("frutinovelas.gateway")
 
@@ -71,6 +73,7 @@ GET_ROUTES = [
 POST_ROUTES = [r"/upload/image", r"/prompt", r"/queue", r"/interrupt"]
 WORKFLOW_NAME = re.compile(r"^[A-Za-z0-9_.\-]+\.api\.json$")
 MAX_UPLOAD_BYTES = 64 * 1024 * 1024
+SESSION_KEY = web.AppKey("session", ClientSession)
 
 
 def _compile(routes: list[str]) -> re.Pattern:
@@ -125,10 +128,10 @@ def create_app(
         if request.path == "/healthz":
             return await handler(request)
         ip = request.headers.get("CF-Connecting-IP") or request.remote or "?"
-        if limiter.blocked(ip):
-            return web.json_response({"error": "demasiados intentos"}, status=429)
         tok = extract_token(request)
         if not tok or not hmac.compare_digest(tok.encode(), token.encode()):
+            if limiter.blocked(ip):
+                return web.json_response({"error": "demasiados intentos"}, status=429)
             limiter.fail(ip)
             return web.json_response({"error": "no autorizado"}, status=401)
         return await handler(request)
@@ -136,13 +139,13 @@ def create_app(
     app = web.Application(middlewares=[auth_mw], client_max_size=MAX_UPLOAD_BYTES)
 
     async def on_startup(app_: web.Application):
-        app_["session"] = ClientSession(
+        app_[SESSION_KEY] = ClientSession(
             timeout=ClientTimeout(total=None, connect=15, sock_read=None),
             auto_decompress=False,
         )
 
     async def on_cleanup(app_: web.Application):
-        await app_["session"].close()
+        await app_[SESSION_KEY].close()
 
     app.on_startup.append(on_startup)
     app.on_cleanup.append(on_cleanup)
@@ -152,32 +155,65 @@ def create_app(
 
     async def identity(_request: web.Request):
         if identity_file and identity_file.is_file():
-            return web.json_response(json.loads(identity_file.read_text(encoding="utf-8")))
+            data = read_identity()
+            if data is None:
+                return web.json_response({"error": "identidad no válida; ejecuta fruti start"}, status=503)
+            return web.json_response(data)
         return web.json_response({"error": "identidad no disponible"}, status=404)
 
+    def read_identity() -> dict | None:
+        if not identity_file:
+            return None
+        try:
+            data = json.loads(identity_file.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and isinstance(data.get("workflows"), dict):
+                return data
+        except (OSError, ValueError):
+            pass
+        return None
+
+    def published_names() -> list[str]:
+        if not workflows_dir or not workflows_dir.is_dir():
+            return []
+        data = read_identity()
+        # Una identidad configurada es el inventario validado del arranque actual.
+        # Los JSON de perfiles desactivados pueden seguir en disco como respaldo.
+        if identity_file and data is None:
+            return []
+        return sorted(
+            p.name
+            for p in workflows_dir.iterdir()
+            if WORKFLOW_NAME.fullmatch(p.name)
+            and p.is_file()
+            and p.resolve().parent == workflows_dir.resolve()
+            and (data is None or p.name in data["workflows"])
+        )
+
     async def list_workflows(_request: web.Request):
-        names = []
-        if workflows_dir and workflows_dir.is_dir():
-            names = sorted(p.name for p in workflows_dir.iterdir() if WORKFLOW_NAME.match(p.name))
-        return web.json_response({"workflows": names})
+        return web.json_response({"workflows": published_names()})
 
     async def get_workflow(request: web.Request):
         name = request.match_info["name"]
-        if not WORKFLOW_NAME.match(name) or not workflows_dir:
+        if not WORKFLOW_NAME.fullmatch(name) or not workflows_dir:
             return web.json_response({"error": "nombre no válido"}, status=400)
         path = (workflows_dir / name).resolve()
-        if path.parent != workflows_dir.resolve() or not path.is_file():
+        if path.parent != workflows_dir.resolve() or name not in published_names():
             return web.json_response({"error": "no encontrado"}, status=404)
-        return web.Response(body=path.read_bytes(), content_type="application/json")
+        body = path.read_bytes()
+        data = read_identity()
+        if data is not None and hashlib.sha256(body).hexdigest() != data["workflows"].get(name):
+            return web.json_response(
+                {"error": "workflow modificado; ejecuta fruti start --reexportar"}, status=409
+            )
+        return web.Response(body=body, content_type="application/json")
 
     async def proxy_ws(request: web.Request):
-        session: ClientSession = request.app["session"]
+        session = request.app[SESSION_KEY]
         target = upstream.replace("http://", "ws://").replace("https://", "wss://") + request.path_qs
         client_ws = web.WebSocketResponse(heartbeat=30, max_msg_size=0)
         await client_ws.prepare(request)
         try:
             async with session.ws_connect(target, heartbeat=30, max_msg_size=0) as up_ws:
-                import asyncio
 
                 async def up_to_client():
                     async for msg in up_ws:
@@ -201,6 +237,7 @@ def create_app(
                 _done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
                 for t in pending:
                     t.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
         except Exception as exc:  # noqa: BLE001
             log.warning("WS upstream error: %s", type(exc).__name__)
         finally:
@@ -210,7 +247,11 @@ def create_app(
     async def proxy(request: web.Request):
         path = request.path
         method = request.method.upper()
-        if method == "GET" and WS_RE.match(path) and request.headers.get("Upgrade", "").lower() == "websocket":
+        if (
+            method == "GET"
+            and WS_RE.match(path)
+            and request.headers.get("Upgrade", "").lower() == "websocket"
+        ):
             return await proxy_ws(request)
         if not ((method == "GET" and GET_RE.match(path)) or (method == "POST" and POST_RE.match(path))):
             return web.json_response({"error": "ruta no permitida por el gateway"}, status=403)
@@ -218,19 +259,43 @@ def create_app(
         if clen is not None and clen > MAX_UPLOAD_BYTES:
             return web.json_response({"error": "cuerpo demasiado grande"}, status=413)
 
-        session: ClientSession = request.app["session"]
+        session = request.app[SESSION_KEY]
         headers = {k: v for k, v in request.headers.items() if k.lower() not in HOP_BY_HOP}
         data = request.content if request.can_read_body else None
         started = time.monotonic()
-        async with session.request(
-            method, upstream + request.path_qs, headers=headers, data=data, allow_redirects=False
-        ) as up:
-            resp_headers = {k: v for k, v in up.headers.items() if k.lower() not in HOP_BY_HOP}
-            resp = web.StreamResponse(status=up.status, headers=resp_headers)
-            await resp.prepare(request)
-            async for chunk in up.content.iter_chunked(1 << 20):
-                await resp.write(chunk)
-            await resp.write_eof()
+        resp = None
+        try:
+            async with session.request(
+                method, upstream + request.path_qs, headers=headers, data=data, allow_redirects=False
+            ) as up:
+                resp_headers = {k: v for k, v in up.headers.items() if k.lower() not in HOP_BY_HOP}
+                resp = web.StreamResponse(status=up.status, headers=resp_headers)
+                await resp.prepare(request)
+                async for chunk in up.content.iter_chunked(1 << 20):
+                    await resp.write(chunk)
+                await resp.write_eof()
+        except (ClientError, TimeoutError) as exc:
+            log.warning("ComfyUI upstream error: %s", type(exc).__name__)
+            if resp is not None and resp.prepared:
+                # No convertir una descarga incompleta en un archivo válido con HTTP 200.
+                if request.transport:
+                    request.transport.close()
+                return resp
+            status = (
+                503
+                if isinstance(exc, ClientConnectionError)
+                else 504
+                if isinstance(exc, TimeoutError)
+                else 502
+            )
+            return web.json_response(
+                {
+                    "error": "ComfyUI no está disponible; comprueba que esté iniciado.",
+                    "code": "comfyui_unavailable",
+                    "gateway_available": True,
+                },
+                status=status,
+            )
         log.info("%s %s -> %s (%.2fs)", method, path, up.status, time.monotonic() - started)
         return resp
 

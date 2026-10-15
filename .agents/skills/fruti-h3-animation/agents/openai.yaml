@@ -1,0 +1,4 @@
+interface:
+  display_name: "fruti-h3-animation"
+  short_description: "Actuación y movimiento audiovisual para H3"
+  default_prompt: "Usa $fruti-h3-animation para preparar y revisar la escena de FRUTINOVELAS con mis referencias."

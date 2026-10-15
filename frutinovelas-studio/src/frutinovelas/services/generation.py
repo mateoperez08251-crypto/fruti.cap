@@ -17,13 +17,16 @@ ACTIVE = ("queued", "uploading", "submitting", "waiting", "running", "downloadin
 
 def enqueue(session, scene_id, expected_revision, request_id):
     scene = scenes.load_scene(session, scene_id)
-    if scene.revision != expected_revision:
-        raise scenes.Conflict(scene.revision)
     existing = session.get(GenerationJob, request_id)
     if existing:
         if existing.scene_id != scene_id:
             raise ComfyError("El ID de petición pertenece a otra escena.")
+        if existing.snapshot["scene_revision"] != expected_revision:
+            raise ComfyError("El ID de petición pertenece a otra revisión de la escena.")
+        # A retry refers to the saved snapshot even if the scene has since changed.
         return existing
+    if scene.revision != expected_revision:
+        raise scenes.Conflict(scene.revision)
     existing = session.scalar(select(GenerationJob).where(GenerationJob.active_scene_id == scene_id))
     if existing:
         return existing
@@ -37,7 +40,7 @@ def enqueue(session, scene_id, expected_revision, request_id):
         raise ComfyError("Configura y comprueba la conexión con RunPod en «Conexión ComfyUI».")
     params = rev.parameters or {}
     seed = params.get("seed") if params.get("seed_mode") == "fixed" else secrets.randbelow(2**53)
-    if not isinstance(seed, int) or not 0 <= seed < 2**53:
+    if type(seed) is not int or not 0 <= seed < 2**53:
         raise ComfyError("La semilla debe ser un entero entre 0 y 9007199254740991.")
     snapshot = dict(
         revision_number=rev.number,
@@ -65,6 +68,11 @@ def enqueue(session, scene_id, expected_revision, request_id):
         session.commit()
     except IntegrityError:
         session.rollback()
+        existing = session.get(GenerationJob, request_id)
+        if existing:
+            if existing.scene_id != scene_id or existing.snapshot["scene_revision"] != expected_revision:
+                raise ComfyError("El ID de petición pertenece a otra escena o revisión.") from None
+            return existing
         existing = session.scalar(select(GenerationJob).where(GenerationJob.active_scene_id == scene_id))
         if existing:
             return existing
@@ -92,14 +100,14 @@ def public_job(job):
     )
 
 
-def transition(factory, job_id, state, error="", **extra):
+def transition(factory, job_id, state, error="", *, expected_states=ACTIVE, **extra):
     with factory() as session:
         values = dict(state=state, error=error, updated_at=utcnow(), **extra)
         if state in ("completed", "failed"):
             values["active_scene_id"] = None
         result = session.execute(
             update(GenerationJob)
-            .where(GenerationJob.id == job_id, GenerationJob.state.in_(ACTIVE))
+            .where(GenerationJob.id == job_id, GenerationJob.state.in_(expected_states))
             .values(**values)
         )
         session.commit()

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookText, ChevronRight, Clapperboard, ListOrdered, Loader2, Pencil, Plus, Save, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useBlocker, useSearchParams } from 'react-router-dom'
 import { api, ApiError, type Chapter, type Scene } from '../api'
 import { PromptDialog } from '../components/Dialogs'
 import { SceneEditor } from '../components/SceneEditor'
@@ -10,7 +10,7 @@ import { useToast } from '../components/Toast'
 
 type Tab = 'escenas' | 'guion' | 'continuidad'
 
-function DocEditor({ chapter, field, title, hint }: { chapter: Chapter; field: 'script_md' | 'continuity_md'; title: string; hint: string }) {
+function DocEditor({ chapter, field, title, hint, onDirtyChange }: { chapter: Chapter; field: 'script_md' | 'continuity_md'; title: string; hint: string; onDirtyChange: (dirty: boolean) => void }) {
   const qc = useQueryClient()
   const toast = useToast()
   const [text, setText] = useState(chapter[field])
@@ -29,6 +29,8 @@ function DocEditor({ chapter, field, title, hint }: { chapter: Chapter; field: '
     },
     onError: (e: ApiError) => toast.error(e.message),
   })
+
+  useEffect(() => onDirtyChange(dirty || save.isPending), [dirty, save.isPending, onDirtyChange])
 
   // Otra parte del programa guardó el capítulo (p. ej. renombrar). Si ESTE documento no cambió en
   // el servidor se adopta la nueva revisión; si cambió, se conserva la antigua para que guardar dé 409.
@@ -88,6 +90,23 @@ export function ChapterPage({ chapterId }: { chapterId: string }) {
   const [tab, setTab] = useState<Tab>('escenas')
   const [renaming, setRenaming] = useState(false)
   const dirtyRef = useRef(false)
+  const [pinnedId, setPinnedId] = useState<string | null>(null)
+  const blocker = useBlocker(({ currentLocation, nextLocation }) =>
+    (currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search) && dirtyRef.current)
+
+  useEffect(() => {
+    if (blocker.state === 'blocked') {
+      if (window.confirm('Hay cambios sin guardar o una operación en curso. ¿Salir de este capítulo?')) blocker.proceed()
+      else blocker.reset()
+    }
+  }, [blocker])
+
+  const changeTab = (next: Tab) => {
+    if (next === tab) return
+    if (dirtyRef.current && !window.confirm('Hay cambios sin guardar o una operación en curso. ¿Cambiar de pestaña y descartar el borrador?')) return
+    dirtyRef.current = false
+    setTab(next)
+  }
 
   const chapter = useQuery({ queryKey: ['chapter', chapterId], queryFn: () => api.chapter(chapterId) })
   const project = useQuery({
@@ -97,22 +116,28 @@ export function ChapterPage({ chapterId }: { chapterId: string }) {
   })
   const scenes = useQuery({ queryKey: ['scenes', chapterId], queryFn: () => api.scenes(chapterId) })
 
-  const selectedId = params.get('escena') ?? scenes.data?.[0]?.id ?? null
+  const requestedId = params.get('escena') ?? pinnedId
+  const selectedId = scenes.data?.some((s) => s.id === requestedId) ? requestedId : scenes.data?.[0]?.id ?? null
   const selectedIndex = scenes.data?.findIndex((s) => s.id === selectedId) ?? -1
   const selected = selectedIndex >= 0 ? scenes.data![selectedIndex] : null
 
   const select = useCallback(
     (id: string | null, force = false) => {
+      if (id === selectedId) return
       if (!force && dirtyRef.current && !window.confirm('Hay cambios sin guardar en esta escena. ¿Descartarlos?')) return
       dirtyRef.current = false
+      setPinnedId(id)
       setParams(id ? { escena: id } : {}, { replace: true })
     },
-    [setParams],
+    [setParams, selectedId],
   )
 
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
-      if (dirtyRef.current) e.preventDefault()
+      if (dirtyRef.current) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
     }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
@@ -132,7 +157,9 @@ export function ChapterPage({ chapterId }: { chapterId: string }) {
 
   const reorder = useMutation({
     mutationFn: (ids: string[]) => api.reorderScenes(chapterId, ids),
-    onMutate: (ids) => {
+    onMutate: async (ids) => {
+      setPinnedId(selectedId)
+      await qc.cancelQueries({ queryKey: ['scenes', chapterId] })
       const prev = qc.getQueryData<Scene[]>(['scenes', chapterId])
       if (prev) {
         const byId = new Map(prev.map((s) => [s.id, s]))
@@ -203,15 +230,15 @@ export function ChapterPage({ chapterId }: { chapterId: string }) {
           </div>
         </div>
         <nav className="tabs" aria-label="Secciones del capítulo">
-          <button className={`tab ${tab === 'escenas' ? 'active' : ''}`} onClick={() => setTab('escenas')} id="tab-escenas">
+          <button className={`tab ${tab === 'escenas' ? 'active' : ''}`} onClick={() => changeTab('escenas')} id="tab-escenas">
             <Clapperboard size={15} /> Escenas
           </button>
-          <button className={`tab ${tab === 'guion' ? 'active' : ''}`} onClick={() => setTab('guion')} id="tab-guion">
+          <button className={`tab ${tab === 'guion' ? 'active' : ''}`} onClick={() => changeTab('guion')} id="tab-guion">
             <BookText size={15} /> Guion
           </button>
           <button
             className={`tab ${tab === 'continuidad' ? 'active' : ''}`}
-            onClick={() => setTab('continuidad')}
+            onClick={() => changeTab('continuidad')}
             id="tab-continuidad"
           >
             <ListOrdered size={15} /> Continuidad
@@ -220,10 +247,12 @@ export function ChapterPage({ chapterId }: { chapterId: string }) {
       </header>
 
       {tab === 'guion' && c && (
-        <DocEditor chapter={c} field="script_md" title="Guion" hint="Markdown del guion del capítulo. Es contexto: no crea escenas automáticamente." />
+        <DocEditor key="script_md" onDirtyChange={onDirtyChange} chapter={c} field="script_md" title="Guion" hint="Markdown del guion del capítulo. Es contexto: no crea escenas automáticamente." />
       )}
       {tab === 'continuidad' && c && (
         <DocEditor
+          key="continuity_md"
+          onDirtyChange={onDirtyChange}
           chapter={c}
           field="continuity_md"
           title="Continuidad"
@@ -233,6 +262,7 @@ export function ChapterPage({ chapterId }: { chapterId: string }) {
 
       {tab === 'escenas' && (
         <>
+          {scenes.isError && <p className="notice warn" role="alert">No se pudieron cargar las escenas. <button className="btn btn-sm" onClick={() => scenes.refetch()}>Reintentar</button></p>}
           {scenes.isLoading && <div className="skeleton" style={{ height: 300 }} />}
 
           {scenes.data && list.length === 0 && (
@@ -259,7 +289,7 @@ export function ChapterPage({ chapterId }: { chapterId: string }) {
                     <Plus size={14} /> Nueva escena
                   </button>
                 </div>
-                <SceneList scenes={list} selectedId={selectedId} onSelect={select} onReorder={(ids) => reorder.mutate(ids)} />
+                <SceneList scenes={list} selectedId={selectedId} onSelect={select} reordering={reorder.isPending} onReorder={(ids) => { if (!reorder.isPending) reorder.mutate(ids) }} />
               </div>
               {selected && (
                 <SceneEditor

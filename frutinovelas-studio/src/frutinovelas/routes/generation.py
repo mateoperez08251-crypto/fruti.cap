@@ -122,10 +122,17 @@ def abandon(job_id: str, session: Session = Depends(get_session)):
     if job.state not in ("queued", "unknown"):
         raise HTTPException(409, "Solo puedes cerrar un trabajo sin enviar o de recepción incierta.")
     id = job.id
+    expected_state = job.state
     session.rollback()
-    svc.transition(
-        session_factory(), id, "failed", "Cerrado por el usuario; no se interrumpió la cola remota."
+    changed = svc.transition(
+        session_factory(),
+        id,
+        "failed",
+        "Cerrado por el usuario; no se interrumpió la cola remota.",
+        expected_states=(expected_state,),
     )
+    if not changed:
+        raise HTTPException(409, "El trabajo cambió de estado. Actualiza antes de volver a cerrarlo.")
     session.expire_all()
     return svc.public_job(_job(session, id))
 

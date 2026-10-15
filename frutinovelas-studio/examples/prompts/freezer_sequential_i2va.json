@@ -1,0 +1,53 @@
+{
+  "profile": "h3_balanced_default",
+  "mode": "I2VA",
+  "duration_seconds": 5,
+  "has_start_image": true,
+  "has_end_image": false,
+  "visual_style": "Cinematic 3D CG animation, vertical 9:16, matching the supplied reference.",
+  "characters": [],
+  "lighting": "The ceiling bulb initially casts a warm pool on the freezer. Cool spill from the open doorway remains after the bulb switches off, keeping the freezer edges readable.",
+  "background": "A fixed storage room contains the same floor tiles, freezer and doorway throughout. The floor and walls remain rigid.",
+  "continuity": [
+    "The freezer lid stays shut. The interior is unoccupied."
+  ],
+  "shots": [
+    {
+      "start": 0,
+      "composition": "The supplied image frames the ceiling bulb and the closed freezer together.",
+      "camera": "The camera holds a static shot.",
+      "beats": [
+        {
+          "start": 0,
+          "end": 0.8,
+          "action": "The bulb glows steadily above the stationary freezer."
+        },
+        {
+          "start": 0.8,
+          "end": 1,
+          "action": "The bulb switches off once. Its warm floor illumination and associated shadows disappear together.",
+          "sound": "One small electrical click accompanies the switch-off."
+        },
+        {
+          "start": 1,
+          "end": 2,
+          "action": "The freezer stays fully still for one complete second in the remaining cool doorway light."
+        },
+        {
+          "start": 2,
+          "end": 2.7,
+          "action": "The freezer body shifts a few centimeters along the tile, then settles; the closed lid and rectangular body retain their shape. Its contact shadow follows the movement.",
+          "sound": "A short scraping sound starts with the visible floor displacement and ends as it stops."
+        },
+        {
+          "start": 2.7,
+          "end": 5,
+          "action": "The freezer rests in its new position. The cool doorway light and the room remain steady."
+        }
+      ]
+    }
+  ],
+  "end_state": "The bulb remains off, the freezer lid remains shut and the room settles into stillness.",
+  "overall_soundscape": "A quiet room tone continues beneath one electrical click, a full beat of stillness, then one short floor scrape. The sound sources are environmental.",
+  "non_diegetic_music": "N/A"
+}

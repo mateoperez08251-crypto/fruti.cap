@@ -104,7 +104,12 @@ class GenerationWorker:
             with self.factory() as s:
                 job = s.get(GenerationJob, self.current_id)
                 if job and job.state in ACTIVE:
-                    transition(self.factory, job.id, "failed" if fatal else job.state, message)
+                    # Once POST /prompt may have happened, a local parsing or disk
+                    # error is not proof that inference failed. Keep its reservation.
+                    state = job.state
+                    if fatal:
+                        state = "failed" if state in ("queued", "uploading") else "unknown"
+                    transition(self.factory, job.id, state, message, expected_states=(job.state,))
 
     def tick(self):
         if not self.lock.acquire():
@@ -137,6 +142,8 @@ class GenerationWorker:
                     return
                 names = {}
                 for role in ("start", "end"):
+                    if self.stop_event.is_set():
+                        return
                     asset_id = p.get(role + "_asset_id")
                     if not asset_id:
                         continue
@@ -146,9 +153,13 @@ class GenerationWorker:
                             raise ValueError("Falta una imagen de referencia")
                         original = asset_path(self.settings, asset)
                     prepared = self.settings.tmp_dir / f"{job.id}-{role}.png"
-                    with Image.open(original) as im:
-                        ImageOps.fit(im.convert("RGB"), (576, 1024)).save(prepared)
-                    names[role] = client.upload(prepared)
+                    try:
+                        with Image.open(original) as im:
+                            oriented = ImageOps.exif_transpose(im)
+                            ImageOps.fit(oriented.convert("RGB"), (576, 1024)).save(prepared)
+                        names[role] = client.upload(prepared)
+                    finally:
+                        prepared.unlink(missing_ok=True)
                 graph = prepare_graph(
                     p["graph"],
                     p["prompt"],
@@ -158,7 +169,7 @@ class GenerationWorker:
                     names.get("end"),
                     job.id,
                 )
-                if not transition(self.factory, job.id, "submitting"):
+                if self.stop_event.is_set() or not transition(self.factory, job.id, "submitting"):
                     return
                 try:
                     r = client.request(
@@ -183,7 +194,7 @@ class GenerationWorker:
                         "Recepción incierta. Se comprobará cola e historial sin reenviar.",
                     )
                     return
-                pid = result.get("prompt_id")
+                pid = result.get("prompt_id") if isinstance(result, dict) else None
                 if not isinstance(pid, str) or not re.fullmatch(r"[0-9a-fA-F-]{1,64}", pid):
                     transition(
                         self.factory,

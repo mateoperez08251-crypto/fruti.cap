@@ -1,0 +1,42 @@
+{
+  "profile": "h3_balanced_default",
+  "mode": "FL2VA",
+  "duration_seconds": 5,
+  "has_start_image": true,
+  "has_end_image": true,
+  "visual_style": "Cinematic 3D CG animation, vertical 9:16, matching the supplied reference.",
+  "characters": [],
+  "lighting": "Preserve the warm sunset direction across both images. Contact shadows under shoes change with pressure while the car reflections stay stable.",
+  "background": "The parked sedan and open passenger door stay fixed against the coastal street.",
+  "continuity": [
+    "Preserve the shoes, trousers, anatomy, threshold and open door from both references."
+  ],
+  "shots": [
+    {
+      "start": 0,
+      "composition": "A low close shot of Darío exiting the front passenger door begins with one shoe planted outside and the other inside.",
+      "camera": "The camera holds a static shot at the reference angle.",
+      "beats": [
+        {
+          "start": 0,
+          "end": 1.3,
+          "action": "Weight transfers onto the outside shoe, the knee flexes, and the hips move forward. The supporting sole stays in contact."
+        },
+        {
+          "start": 1.3,
+          "end": 3.8,
+          "action": "The supporting leg extends as the other shoe clears the sill along a short arc. Cloth folds follow the knee and hip movement."
+        },
+        {
+          "start": 3.8,
+          "end": 5,
+          "action": "The second shoe lands heel to sole. Weight settles between both feet, converging to the final reference pose.",
+          "sound": "One soft footfall coincides with the second shoe contacting the pavement."
+        }
+      ]
+    }
+  ],
+  "end_state": "Both feet are planted in the final reference position. The passenger door is still open.",
+  "overall_soundscape": "Quiet street ambience, a small cloth rustle and one soft leather shoe footfall.",
+  "non_diegetic_music": "N/A"
+}

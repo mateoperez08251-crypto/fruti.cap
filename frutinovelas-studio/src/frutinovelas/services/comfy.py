@@ -67,7 +67,12 @@ def validate_workflow(graph: dict):
     if not isinstance(graph, dict):
         raise ComfyError("El servidor no publicó un grafo API válido.")
     for id, kind in expected.items():
-        if graph.get(id, {}).get("class_type") != kind or not isinstance(graph[id].get("inputs"), dict):
+        node = graph.get(id)
+        if (
+            not isinstance(node, dict)
+            or node.get("class_type") != kind
+            or not isinstance(node.get("inputs"), dict)
+        ):
             raise ComfyError("El flujo H3 publicado no coincide con el perfil inicio/final del programa.")
     h3 = graph["9"]["inputs"]
     scheduler = graph["14"]["inputs"]
@@ -78,10 +83,11 @@ def validate_workflow(graph: dict):
 class ComfyClient:
     def __init__(self, url: str, token: str, transport=None):
         self.url = validate_url(url)
+        settings = get_settings()
         self.client = httpx.Client(
             base_url=self.url + "/",
             headers={"Authorization": "Bearer " + token} if token else {},
-            timeout=httpx.Timeout(60, connect=10),
+            timeout=httpx.Timeout(settings.comfy_request_timeout, connect=settings.comfy_connect_timeout),
             follow_redirects=False,
             trust_env=False,
             transport=transport,
@@ -92,7 +98,7 @@ class ComfyClient:
 
     def request(self, method, path, **kwargs):
         r = self.client.request(method, path.lstrip("/"), **kwargs)
-        if r.status_code >= 400:
+        if not 200 <= r.status_code < 300:
             raise ComfyError(
                 f"El gateway devolvió HTTP {r.status_code}. Revisa URL, token y el estado de RunPod.",
                 r.status_code,
@@ -100,13 +106,24 @@ class ComfyClient:
         return r
 
     def get(self, path):
-        return self.request("GET", path).json()
+        try:
+            result = self.request("GET", path).json()
+        except ValueError as exc:
+            if isinstance(exc, ComfyError):
+                raise
+            raise ComfyError(
+                "El gateway devolvió una respuesta JSON inválida; se reintentará la consulta."
+            ) from exc
+        if not isinstance(result, dict):
+            raise ComfyError("El gateway devolvió una respuesta inesperada; se reintentará la consulta.")
+        return result
 
     def connect(self):
         stats = self.get("/system_stats")
         identity = self.get("/frutinovelas/identity")
         raw = self.request("GET", "/frutinovelas/workflows/" + WORKFLOW).content
-        expected = identity.get("workflows", {}).get(WORKFLOW)
+        workflows = identity.get("workflows")
+        expected = workflows.get(WORKFLOW) if isinstance(workflows, dict) else None
         if not expected or hashlib.sha256(raw).hexdigest() != expected:
             raise ComfyError("El SHA-256 del flujo no coincide con la identidad del servidor.")
         graph = json.loads(raw)

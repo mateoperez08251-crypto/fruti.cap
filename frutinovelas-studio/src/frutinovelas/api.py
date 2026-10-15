@@ -27,12 +27,13 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.orm.exc import StaleDataError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from frutinovelas import __version__
 from frutinovelas.config import APP_NAME, get_settings
 from frutinovelas.migrate import upgrade_to_head
-from frutinovelas.routes import assets, generation, projects, scenes, system
+from frutinovelas.routes import assets, generation, projects, prompts, scenes, system
 from frutinovelas.worker import GenerationWorker
 
 log = logging.getLogger("frutinovelas.api")
@@ -103,6 +104,13 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.exception_handler(StaleDataError)
+    async def concurrent_edit(_request: Request, _exc: StaleDataError):
+        return JSONResponse(
+            {"detail": "El registro cambió mientras lo editabas. Recarga y vuelve a intentarlo."},
+            status_code=409,
+        )
+
     @app.middleware("http")
     async def require_token(request: Request, call_next):
         token = settings.api_token
@@ -112,7 +120,7 @@ def create_app() -> FastAPI:
                 return JSONResponse({"detail": "Se requiere autorización."}, status_code=401)
         return await call_next(request)
 
-    for module in (system, projects, scenes, assets, generation):
+    for module in (system, projects, scenes, assets, generation, prompts):
         app.include_router(module.router, prefix=API_PREFIX)
 
     ui = frontend_dir()

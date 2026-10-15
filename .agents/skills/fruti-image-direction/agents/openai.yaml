@@ -1,0 +1,4 @@
+interface:
+  display_name: "fruti-image-direction"
+  short_description: "Imágenes y edición con luz y fondos coherentes"
+  default_prompt: "Usa $fruti-image-direction para preparar y revisar la escena de FRUTINOVELAS con mis referencias."

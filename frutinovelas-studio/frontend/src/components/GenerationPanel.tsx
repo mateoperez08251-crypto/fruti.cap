@@ -16,10 +16,10 @@ export function GenerationPanel({ scene, dirty }: { scene: Scene; dirty: boolean
   const toast = useToast()
   const connection = useQuery({ queryKey: ['comfy-connection'], queryFn: api.comfyConnection })
   const jobs = useQuery({ queryKey: ['generations', scene.id], queryFn: () => api.generations(scene.id),
-    refetchInterval: (q) => q.state.data?.some((j) => !terminal.has(j.state)) ? 2500 : false })
+    refetchInterval: (q) => q.state.data?.some((j) => !terminal.has(j.state)) ? 2500 : 10_000 })
   const active = jobs.data?.find((j) => !terminal.has(j.state))
   const durationOk = scene.duration_seconds >= 4 && scene.duration_seconds <= 15
-  const ready = !dirty && !!scene.start_asset && !!scene.prompt.trim() && durationOk && connection.data?.configured && !active
+  const ready = !dirty && !!scene.start_asset && !!scene.prompt.trim() && durationOk && connection.data?.configured && !connection.isError && !jobs.isError && !active
   const generate = useMutation({
     mutationFn: () => api.generateScene(scene.id, scene.revision, crypto.randomUUID()),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['generations', scene.id] }); toast.ok('Escena añadida a la cola de generación') },
@@ -34,7 +34,8 @@ export function GenerationPanel({ scene, dirty }: { scene: Scene; dirty: boolean
     <div className="generation-heading"><h3><Film size={18} /> Animación de esta escena</h3>
       <button className="btn btn-ghost btn-sm" onClick={() => jobs.refetch()} aria-label="Actualizar generaciones"><RefreshCw size={14} /></button></div>
     <p className="subtle">H3 · 9:16 · 20 pasos · {scene.end_asset ? 'inicio y final' : 'imagen inicial'} · las versiones anteriores se conservan.</p>
-    {!connection.data?.configured && <p className="notice warn"><Link to="/conexion">Configura la conexión con RunPod</Link> antes de generar.</p>}
+    {connection.isError && <p className="notice warn" role="alert">No se pudo consultar la configuración de ComfyUI. <button className="btn btn-sm" onClick={() => connection.refetch()}>Reintentar</button></p>}
+    {connection.data && !connection.data.configured && <p className="notice warn"><Link to="/conexion">Configura la conexión con RunPod</Link> antes de generar.</p>}
     {dirty && <p className="subtle">Guarda los cambios con «Guardar» antes de generar.</p>}
     {!durationOk && <p className="notice warn">Para H3 selecciona entre 4 y 15 segundos; usa 5 s para esta prueba.</p>}
     <button id="btn-generate-scene" className="btn btn-primary" disabled={!ready || generate.isPending || jobs.isLoading}

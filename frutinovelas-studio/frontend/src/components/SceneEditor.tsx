@@ -7,6 +7,7 @@ import { ConfirmDialog } from './Dialogs'
 import { ImageDrop, Lightbox } from './ImageDrop'
 import { useToast } from './Toast'
 import { GenerationPanel } from './GenerationPanel'
+import { PromptCheck } from './PromptCheck'
 
 type Draft = {
   title: string
@@ -48,6 +49,9 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
   const [zoom, setZoom] = useState<Asset | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
+  const [startUploading, setStartUploading] = useState(false)
+  const [endUploading, setEndUploading] = useState(false)
+  const uploading = startUploading || endUploading
 
   // Si la escena cambia desde fuera (otro guardado, MCP) y no hay cambios locales, sincroniza.
   // Con cambios locales se conserva la revisión base, así el guardado responde 409 en vez de sobrescribir.
@@ -61,13 +65,12 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
       setDraft(fromScene(scene))
     }
   }
-  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange])
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft((d) => ({ ...d, [k]: v }))
 
   const duration = Number(draft.duration.replace(',', '.'))
   const durationOk = Number.isFinite(duration) && duration >= 0.5 && duration <= 60
-  const seedOk = draft.seedMode === 'random' || /^\d+$/.test(draft.seed)
+  const seedOk = draft.seedMode === 'random' || (/^\d+$/.test(draft.seed) && Number.isSafeInteger(Number(draft.seed)))
   const mode = draft.start ? (draft.end ? 'FL2VA' : 'I2VA') : null
   const ratioMismatch = draft.start && draft.end && Math.abs((ratio(draft.start) ?? 0) - (ratio(draft.end) ?? 0)) > 0.01
   const hasPicture2 = /<\s*picture\s*2\s*>/i.test(draft.prompt)
@@ -79,7 +82,9 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
   })
 
   const save = useMutation({
-    mutationFn: () => {
+    mutationFn: (submitted: Draft) => {
+      const draft = submitted
+      const duration = Number(draft.duration.replace(',', '.'))
       const payload: Record<string, unknown> = { expected_revision: base.revision }
       if (draft.title !== clean.title) payload.title = draft.title
       if (draft.description !== clean.description) payload.description = draft.description
@@ -96,9 +101,20 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
       }
       return api.updateScene(scene.id, payload as { expected_revision: number })
     },
-    onSuccess: (s) => {
+    onSuccess: (s, submitted) => {
       setBase(s)
-      setDraft(fromScene(s))
+      // El usuario puede seguir escribiendo mientras se guarda. Conserva los campos
+      // que cambiaron desde el envío, en vez de reemplazarlos por la respuesta anterior.
+      setDraft((current) => {
+        const saved = fromScene(s)
+        const merged = { ...current }
+        for (const key of Object.keys(saved) as (keyof Draft)[]) {
+          if (JSON.stringify(current[key]) === JSON.stringify(submitted[key])) {
+            Object.assign(merged, { [key]: saved[key] })
+          }
+        }
+        return merged
+      })
       qc.setQueryData<Scene[]>(['scenes', s.chapter_id], (xs) => xs?.map((x) => (x.id === s.id ? s : x)))
       qc.invalidateQueries({ queryKey: ['chapters'] })
       toast.ok(s.revision_number > base.revision_number ? `Guardado · revisión ${s.revision_number}` : 'Guardado')
@@ -106,11 +122,13 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
     onError: (e: ApiError) => toast.error(e.message),
   })
 
-  const canSave = dirty && durationOk && seedOk && !save.isPending && !(draft.end && !draft.start)
+  useEffect(() => onDirtyChange(dirty || save.isPending || uploading), [dirty, save.isPending, uploading, onDirtyChange])
+
+  const canSave = dirty && durationOk && seedOk && !uploading && !save.isPending && !(draft.end && !draft.start)
 
   const doSave = useCallback(() => {
-    if (canSave) save.mutate()
-  }, [canSave, save])
+    if (canSave) save.mutate(draft)
+  }, [canSave, save, draft])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -168,6 +186,7 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
       <div className="refs">
         <ImageDrop
           id="drop-start"
+          onBusyChange={setStartUploading}
           label="Inicio"
           asset={draft.start}
           onChange={(a) => setDraft((d) => ({ ...d, start: a, end: a ? d.end : null }))}
@@ -179,6 +198,7 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
         </div>
         <ImageDrop
           id="drop-end"
+          onBusyChange={setEndUploading}
           label="Final"
           optional
           asset={draft.end}
@@ -194,7 +214,7 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
           <TriangleAlert size={16} />
           <span>
             Inicio ({draft.start?.width}×{draft.start?.height}) y final ({draft.end?.width}×{draft.end?.height}) tienen
-            proporciones distintas. No se recortarán automáticamente; conviene preparar ambas con el mismo formato.
+            proporciones distintas. Al generar se ajustan al centro a 576×1024; prepara ambas en 9:16 para evitar perder detalles importantes.
           </span>
         </div>
       )}
@@ -224,6 +244,9 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
         </div>
       )}
 
+      <PromptCheck input={{ prompt: draft.prompt, duration_seconds: duration,
+        has_start_image: Boolean(draft.start), has_end_image: Boolean(draft.end) }} />
+
       <div className="row">
         <div className="field">
           <label htmlFor="scene-duration">Duración solicitada (segundos)</label>
@@ -236,7 +259,7 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
             aria-invalid={!durationOk}
             style={!durationOk ? { borderColor: 'var(--danger)' } : undefined}
           />
-          <span className="hint">{durationOk ? 'Entre 0,5 y 60 s.' : 'Introduce un valor entre 0,5 y 60.'}</span>
+          <span className="hint">{durationOk ? 'Puedes guardar 0,5–60 s; este flujo H3 genera únicamente 4–15 s.' : 'Introduce un valor entre 0,5 y 60.'}</span>
         </div>
         <div className="field">
           <label htmlFor="scene-seed-mode">Semilla</label>
@@ -261,6 +284,7 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
               onChange={(e) => set('seed', e.target.value.replace(/\D/g, ''))}
               aria-invalid={!seedOk}
             />
+            {!seedOk && <span className="hint">Usa un entero entre 0 y 9007199254740991.</span>}
           </div>
         )}
       </div>
@@ -294,6 +318,7 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
           <History size={15} /> Historial de revisiones ({base.revision_number})
         </summary>
         <div className="adv-body">
+          {history.isError && <p role="alert">No se pudo cargar el historial. <button className="btn btn-sm" onClick={() => history.refetch()}>Reintentar</button></p>}
           {history.isLoading && <Loader2 className="spin" size={18} />}
           <div className="history">
             {history.data?.map((r) => (
@@ -334,14 +359,14 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
           )}
         </div>
         <div className="right">
-          <button className="btn btn-ghost btn-danger" onClick={() => setConfirmDelete(true)} id="btn-delete-scene">
+          <button className="btn btn-ghost btn-danger" onClick={() => setConfirmDelete(true)} disabled={save.isPending || uploading} id="btn-delete-scene">
             <Trash2 size={15} /> Eliminar
           </button>
-          <button className="btn" onClick={() => duplicate.mutate()} disabled={duplicate.isPending} id="btn-duplicate-scene">
+          <button className="btn" onClick={() => duplicate.mutate()} disabled={dirty || uploading || save.isPending || duplicate.isPending} title={dirty ? 'Guarda los cambios antes de duplicar' : undefined} id="btn-duplicate-scene">
             <Copy size={15} /> Duplicar
           </button>
           {dirty && (
-            <button className="btn btn-ghost" onClick={() => setDraft(clean)}>
+            <button className="btn btn-ghost" disabled={save.isPending || uploading} onClick={() => setDraft(clean)}>
               Descartar
             </button>
           )}
@@ -351,7 +376,7 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
         </div>
       </div>
 
-      <GenerationPanel scene={base} dirty={dirty || save.isPending} />
+      <GenerationPanel scene={base} dirty={dirty || save.isPending || uploading} />
       {zoom && <Lightbox asset={zoom} onClose={() => setZoom(null)} />}
       {confirmDelete && (
         <ConfirmDialog
