@@ -1,5 +1,5 @@
-import { ImagePlus, Loader2, Maximize2, RefreshCw, Trash2 } from 'lucide-react'
-import { useRef, useState, type DragEvent } from 'react'
+import { ImagePlus, Loader2, Maximize2, RefreshCw, Trash2, X } from 'lucide-react'
+import { useEffect, useRef, useState, type DragEvent } from 'react'
 import { api, ApiError, assetUrl, thumbUrl, type Asset } from '../api'
 import { useToast } from './Toast'
 
@@ -14,23 +14,38 @@ type Props = {
   disabledHint?: string
   onChange: (asset: Asset | null) => void
   onZoom: (asset: Asset) => void
+  onBusyChange: (busy: boolean) => void
 }
 
-export function ImageDrop({ id, label, optional, asset, disabled, disabledHint, onChange, onZoom }: Props) {
+export function ImageDrop({ id, label, optional, asset, disabled, disabledHint, onChange, onZoom, onBusyChange }: Props) {
   const toast = useToast()
   const input = useRef<HTMLInputElement>(null)
   const [over, setOver] = useState(false)
   const [busy, setBusy] = useState(false)
+  const uploading = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    if (disabled) uploading.current?.abort()
+    return () => uploading.current?.abort()
+  }, [disabled])
+
+  useEffect(() => {
+    onBusyChange(busy)
+    return () => onBusyChange(false)
+  }, [busy, onBusyChange])
 
   const upload = async (file: File | undefined) => {
-    if (!file || disabled) return
+    if (!file || disabled || uploading.current) return
+    const controller = new AbortController()
+    uploading.current = controller
     setBusy(true)
     try {
-      const a = await api.uploadAsset(file)
-      onChange(a)
+      const a = await api.uploadAsset(file, controller.signal)
+      if (!controller.signal.aborted) onChange(a)
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'No se pudo subir la imagen.')
+      if (!controller.signal.aborted) toast.error(e instanceof ApiError ? e.message : 'No se pudo subir la imagen.')
     } finally {
+      if (uploading.current === controller) uploading.current = null
       setBusy(false)
       if (input.current) input.current.value = ''
     }
@@ -47,15 +62,21 @@ export function ImageDrop({ id, label, optional, asset, disabled, disabledHint, 
       id={id}
       className={`drop ${over ? 'over' : ''} ${asset ? 'filled' : ''}`}
       role="button"
-      tabIndex={disabled ? -1 : 0}
+      tabIndex={disabled || busy ? -1 : 0}
       aria-label={`${label}: ${asset ? 'cambiar imagen' : 'subir imagen'}`}
-      aria-disabled={disabled}
+      aria-disabled={disabled || busy}
+      aria-busy={busy}
       style={disabled ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
-      onClick={() => !asset && !disabled && input.current?.click()}
-      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && !disabled && input.current?.click()}
+      onClick={() => !asset && !disabled && !busy && input.current?.click()}
+      onKeyDown={(e) => {
+        if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault()
+          if (!disabled && !busy) input.current?.click()
+        }
+      }}
       onDragOver={(e) => {
         e.preventDefault()
-        if (!disabled) setOver(true)
+        if (!disabled && !busy) setOver(true)
       }}
       onDragLeave={() => setOver(false)}
       onDrop={onDrop}
@@ -89,6 +110,7 @@ export function ImageDrop({ id, label, optional, asset, disabled, disabledHint, 
               className="btn btn-sm btn-icon"
               title="Reemplazar"
               aria-label="Reemplazar imagen"
+              disabled={disabled || busy}
               onClick={(e) => {
                 e.stopPropagation()
                 input.current?.click()
@@ -101,6 +123,7 @@ export function ImageDrop({ id, label, optional, asset, disabled, disabledHint, 
               className="btn btn-sm btn-icon btn-danger"
               title="Quitar"
               aria-label="Quitar imagen"
+              disabled={disabled || busy}
               onClick={(e) => {
                 e.stopPropagation()
                 onChange(null)
@@ -129,8 +152,14 @@ export function ImageDrop({ id, label, optional, asset, disabled, disabledHint, 
 }
 
 export function Lightbox({ asset, onClose }: { asset: Asset; onClose: () => void }) {
+  useEffect(() => {
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    window.addEventListener('keydown', close)
+    return () => window.removeEventListener('keydown', close)
+  }, [onClose])
   return (
-    <div className="lightbox" onClick={onClose} role="dialog" aria-label="Imagen ampliada">
+    <div className="lightbox" onClick={onClose} role="dialog" aria-modal="true" aria-label="Imagen ampliada">
+      <button className="btn btn-icon" aria-label="Cerrar imagen ampliada" onClick={onClose} autoFocus style={{ position: 'absolute', top: 20, right: 20 }}><X size={20} /></button>
       <img src={assetUrl(asset.id)} alt={asset.original_name} />
     </div>
   )

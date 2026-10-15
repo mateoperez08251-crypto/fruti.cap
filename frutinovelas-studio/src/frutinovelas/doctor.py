@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import math
 import os
 import shutil
 import socket
@@ -84,11 +85,14 @@ def mask_url(url: str) -> str:
     """Oculta usuario, contraseña y query (donde suelen viajar tokens)."""
     try:
         parts = urlsplit(url)
+        port = parts.port
     except ValueError:
         return "<url no válida>"
     host = parts.hostname or ""
-    if parts.port:
-        host = f"{host}:{parts.port}"
+    if ":" in host:
+        host = f"[{host}]"
+    if port:
+        host = f"{host}:{port}"
     if parts.username or parts.password:
         host = f"***@{host}"
     query = "***" if parts.query else ""
@@ -242,7 +246,9 @@ def check_settings() -> tuple[list[Check], Any]:
             "Configuración",
             "Archivo .env",
             INFO,
-            f"usado: {env_file.resolve()}" if env_file.is_file() else "no hay .env en esta carpeta; se usan valores por defecto",
+            f"usado: {env_file.resolve()}"
+            if env_file.is_file()
+            else "no hay .env en esta carpeta; se usan valores por defecto",
         ),
         Check("Configuración", "API", INFO, f"{settings.api_host}:{settings.api_port}"),
         Check("Configuración", "MCP", INFO, f"{settings.mcp_host}:{settings.mcp_port}"),
@@ -317,9 +323,9 @@ def check_storage(settings: Any) -> list[Check]:
 def check_sqlite(settings: Any) -> list[Check]:
     version = sqlite3.sqlite_version
     tmp_root = Path(settings.tmp_dir) if settings is not None else Path(tempfile.gettempdir())
-    tmp_root.mkdir(parents=True, exist_ok=True)
     db = tmp_root / f".doctor-{uuid.uuid4().hex}.sqlite3"
     try:
+        tmp_root.mkdir(parents=True, exist_ok=True)
         con = sqlite3.connect(db, timeout=5)
         try:
             mode = con.execute("PRAGMA journal_mode=WAL").fetchone()[0]
@@ -329,7 +335,7 @@ def check_sqlite(settings: Any) -> list[Check]:
             con.commit()
         finally:
             con.close()
-    except sqlite3.Error as exc:
+    except (sqlite3.Error, OSError) as exc:
         return [Check("Base de datos", "SQLite", FAIL, f"{version}: {exc}")]
     finally:
         for suffix in ("", "-wal", "-shm"):
@@ -347,7 +353,14 @@ def check_sqlite(settings: Any) -> list[Check]:
                 hint="Evita guardar los datos en una carpeta de red o sincronizada.",
             )
         ]
-    return [Check("Base de datos", "SQLite", OK, f"{version}, WAL y claves foráneas {'activas' if fk else 'inactivas'}")]
+    return [
+        Check(
+            "Base de datos",
+            "SQLite",
+            OK,
+            f"{version}, WAL y claves foráneas {'activas' if fk else 'inactivas'}",
+        )
+    ]
 
 
 def check_ffmpeg(settings: Any) -> list[Check]:
@@ -377,9 +390,27 @@ def check_comfyui(url: str, timeout: float) -> list[Check]:
     import httpx
 
     shown = mask_url(url)
-    endpoint = url.rstrip("/") + "/system_stats"
     try:
-        with httpx.Client(timeout=httpx.Timeout(timeout, connect=timeout)) as client:
+        parts = urlsplit(url)
+        if parts.scheme not in ("http", "https") or not parts.hostname or parts.port == 0:
+            raise ValueError("URL HTTP(S) requerida")
+        if not math.isfinite(timeout) or timeout <= 0:
+            raise ValueError("timeout positivo requerido")
+        endpoint = urlunsplit(
+            (parts.scheme, parts.netloc, parts.path.rstrip("/") + "/system_stats", parts.query, "")
+        )
+    except ValueError:
+        return [
+            Check(
+                "ComfyUI",
+                "Conexión",
+                WARN,
+                "URL o tiempo de espera no válido.",
+                hint="Usa una URL HTTP(S) con puerto válido y --timeout mayor que cero.",
+            )
+        ]
+    try:
+        with httpx.Client(timeout=httpx.Timeout(timeout, connect=timeout), trust_env=False) as client:
             resp = client.get(endpoint)
     except httpx.HTTPError as exc:
         return [
@@ -400,14 +431,30 @@ def check_comfyui(url: str, timeout: float) -> list[Check]:
     except ValueError:
         return [Check("ComfyUI", "Conexión", WARN, f"{shown} respondió algo que no es JSON; ¿es ComfyUI?")]
 
-    system = stats.get("system", {}) if isinstance(stats, dict) else {}
+    if not isinstance(stats, dict) or not isinstance(stats.get("system"), dict):
+        return [
+            Check("ComfyUI", "Conexión", WARN, f"{shown} devolvió JSON sin estadísticas válidas de ComfyUI.")
+        ]
+    system = stats["system"]
     version = system.get("comfyui_version") or "versión no informada"
     out = [Check("ComfyUI", "Conexión", OK, f"{shown} — ComfyUI {version}")]
-    for dev in stats.get("devices", []) if isinstance(stats, dict) else []:
-        name = dev.get("name", "dispositivo")
+    devices = stats.get("devices", [])
+    if not isinstance(devices, list):
+        devices = []
+    for dev in devices:
+        if not isinstance(dev, dict):
+            continue
+        name = str(dev.get("name") or "dispositivo")
         total = dev.get("vram_total") or 0
         free = dev.get("vram_free") or 0
-        if total:
+        if (
+            isinstance(total, (int, float))
+            and isinstance(free, (int, float))
+            and math.isfinite(total)
+            and math.isfinite(free)
+            and total > 0
+            and free >= 0
+        ):
             detail = f"{name} — VRAM {free / 1024**3:.1f} / {total / 1024**3:.1f} GB libres"
         else:
             detail = name
@@ -424,14 +471,18 @@ def check_api_port(settings: Any) -> list[Check]:
     except OSError:
         busy = False
     if busy:
-        return [Check("Programa", "Puerto API", INFO, f"{probe_host}:{port} ya está en uso (¿API en marcha?)")]
+        return [
+            Check("Programa", "Puerto API", INFO, f"{probe_host}:{port} ya está en uso (¿API en marcha?)")
+        ]
     return [Check("Programa", "Puerto API", OK, f"{probe_host}:{port} libre")]
 
 
 # --------------------------------------------------------------------------- ejecución
 
 
-def run_checks(*, comfy_url: str | None = None, skip_comfy: bool = False, comfy_timeout: float = 5.0) -> list[Check]:
+def run_checks(
+    *, comfy_url: str | None = None, skip_comfy: bool = False, comfy_timeout: float = 5.0
+) -> list[Check]:
     checks: list[Check] = []
     checks += check_python()
     checks += check_packages()

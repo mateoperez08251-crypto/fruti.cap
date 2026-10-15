@@ -72,6 +72,10 @@ class Chapter(TimestampMixin, Base):
     revision: Mapped[int] = mapped_column(Integer, default=1)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Compare the revision in the UPDATE itself, not only in the HTTP handler.
+    # Otherwise simultaneous editors can both pass the same expected_revision.
+    __mapper_args__ = {"version_id_col": revision, "version_id_generator": False}
+
     project: Mapped[Project] = relationship(back_populates="chapters")
     scenes: Mapped[list[Scene]] = relationship(
         back_populates="chapter", cascade="all, delete-orphan", order_by="Scene.order_index"
@@ -104,6 +108,8 @@ class Scene(TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(200), default="")
     description: Mapped[str] = mapped_column(Text, default="")
     revision: Mapped[int] = mapped_column(Integer, default=1)
+
+    __mapper_args__ = {"version_id_col": revision, "version_id_generator": False}
 
     chapter: Mapped[Chapter] = relationship(back_populates="scenes")
     revisions: Mapped[list[SceneRevision]] = relationship(

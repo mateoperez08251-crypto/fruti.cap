@@ -1,0 +1,293 @@
+FRUTI.CAP — INICIO EN WINDOWS Y CONEXIÓN MCP CON CHATGPT
+Revisado: 15 de octubre de 2026
+
+Esta guía corresponde al código de este repositorio. Sustituye las rutas de
+ejemplo por tus carpetas reales. Los comandos de Windows se pegan en CMD.
+Ejecuta una línea cada vez y comprueba que terminó sin error antes de seguir.
+
+QUÉ HACE CADA PARTE
+
+1. FRUTINOVELAS Studio: interfaz y API en http://127.0.0.1:8765.
+2. MCP de prompts: escucha en http://127.0.0.1:8766/mcp y ofrece:
+   - get_directing_guidance
+   - prepare_h3_prompt
+   - prepare_image_prompt
+   - review_h3_prompt
+3. tunnel-client: conecta ese MCP local con el túnel privado de OpenAI.
+4. ComfyUI y el gateway: servidor GPU independiente, necesario para renderizar
+   desde Studio. No hace falta encenderlo para leer guías o preparar prompts.
+
+El MCP publicado aquí prepara textos; no ofrece generate_image, no guarda
+escenas y no arranca renders. Si tu conexión actual anuncia generate_image,
+es otro servidor o una implementación local adicional: conserva su proceso y
+configuración hasta identificarlo. Activar ComfyUI no añade herramientas a
+este MCP de prompts. El túnel tampoco instala modelos ni cambia capacidades.
+
+PRIMERA VEZ: REVISAR O ACTUALIZAR TU COPIA
+
+Ejemplo de carpeta del repositorio: C:\proyectos\fruti.cap
+Ejemplo de carpeta del estudio: C:\proyectos\fruti.cap\frutinovelas-studio
+
+En CMD:
+
+  cd /d "C:\proyectos\fruti.cap"
+  git status --short
+  git branch --show-current
+  git log -1 --oneline
+
+Guarda tu trabajo antes de actualizar. Cierra Studio y el MCP cuando no haya
+generaciones pendientes. Un git pull descarga código; no actualiza un proceso
+que sigue abierto. Las mejoras solo llegan mediante pull cuando están en la
+rama que descargas.
+
+Si estás en main y git status --short no muestra cambios:
+
+  git pull --ff-only origin main
+
+Si hay cambios locales o Git indica divergencia, detente y conserva esa copia.
+No uses reset --hard, clean ni un push forzado para resolver la actualización.
+También puedes utilizar el actualizador seguro incluido en esta entrega:
+
+  cd /d "C:\proyectos\fruti.cap\frutinovelas-studio"
+  actualizar.cmd
+
+iniciar.cmd también busca actualizaciones antes de arrancar. Se exige main
+limpio, el repositorio remoto correcto y los servidores locales detenidos;
+solo se permite avanzar sin mezclar historiales (fast-forward). Si la revisión
+falla, se detiene antes de instalar dependencias. Para usar voluntariamente
+tu versión local sin actualizar, en ESA ventana de CMD:
+
+  set FRUTINOVELAS_AUTO_UPDATE=0
+  iniciar.cmd
+
+Para volver al comportamiento normal en esa ventana:
+
+  set FRUTINOVELAS_AUTO_UPDATE=
+
+Esto actualiza al arrancar; no crea una tarea programada ni ejecuta git pull
+en medio de una generación. No descarga cambios mientras tu PC esté apagada.
+
+Antes de la primera instalación debes tener Python 3.12, Git y Node.js 24 LTS
+(también sirve la rama 22 desde 22.13). Compruébalos:
+
+  py -3.12 --version
+  git --version
+  node --version
+  npm.cmd --version
+
+Instala uv si aún no está disponible para Python 3.12:
+
+  py -3.12 -m pip install uv
+
+VENTANA 1 DE CMD: INICIAR STUDIO
+
+  cd /d "C:\proyectos\fruti.cap\frutinovelas-studio"
+  iniciar.cmd
+
+Abre http://127.0.0.1:8765 y deja esta ventana abierta.
+Si necesitas hacer los pasos de instalación manualmente:
+
+  py -3.12 -m uv sync --frozen --link-mode copy
+  npm.cmd --prefix frontend ci
+  npm.cmd --prefix frontend run build
+  py -3.12 -m uv run --frozen frutinovelas-api
+
+Para leer las skills mediante MCP basta con las dependencias Python; la
+interfaz, Node.js y Studio no son requisitos del servidor de prompts.
+
+VENTANA 2 DE CMD: INICIAR EL MCP LOCAL
+
+  cd /d "C:\proyectos\fruti.cap\frutinovelas-studio"
+  py -3.12 -m uv sync --frozen --link-mode copy
+  py -3.12 -m uv run --frozen frutinovelas-mcp --transport streamable-http --host 127.0.0.1 --port 8766
+
+Déjalo abierto. La dirección MCP es http://127.0.0.1:8766/mcp.
+Sin --transport streamable-http se usa stdio, que no abre ese puerto.
+Este servidor HTTP acepta loopback. Usa el túnel para ChatGPT web.
+
+Si el puerto 8766 ya está ocupado, identifica su proceso sin cerrarlo:
+
+  netstat -ano | findstr :8766
+
+El último número es el PID; puedes buscarlo en el Administrador de tareas.
+Si pertenece al MCP que ya usabas, conserva ese servidor. Para probar este
+MCP por separado puedes elegir --port 8767 y cambiar también su URL en el
+perfil de tunnel-client. No apuntes ambos servicios al mismo puerto.
+
+Una página vacía o un error 405 al abrir /mcp en el navegador no basta para
+decidir si MCP funciona: MCP intercambia mensajes de protocolo. La prueba
+final consiste en listar herramientas y ejecutar una llamada desde ChatGPT.
+
+COMFYUI: ENCENDER EL SERVIDOR GPU CUANDO VAYAS A RENDERIZAR
+
+Si ya tienes el kit instalado en RunPod, inicia el pod. Estos comandos van
+en LA TERMINAL DEL POD, no en el CMD de Windows:
+
+  python3 /workspace/frutinovelas-kit/scripts/fruti_remote.py start
+  fruti status
+
+Si tu kit está en otra ruta, usa esa ruta real. Para una instalación nueva
+sigue docs/RUNPOD.md; start no sustituye la instalación inicial.
+
+En Studio, abre Conexión ComfyUI. Introduce la URL y el token de TU gateway
+y pulsa Guardar y comprobar. Usa el puerto del gateway (8189), no publiques
+ComfyUI directamente (8188). Si cambias de pod, comprueba su nueva URL.
+
+Los modelos Qwen son opcionales en el kit. Solo si quieres instalarlos y
+tienes espacio/GPU, ejecuta en la terminal del pod:
+
+  fruti models --qwen-t2i si --qwen-edit fp8mixed
+  fruti start --qwen-t2i si --qwen-edit fp8mixed --reexportar
+
+Esto puede descargar muchos GB. Prepara los flujos Qwen del servidor; no
+implementa generate_image en el MCP de prompts de esta entrega. Una respuesta
+available:false de otro MCP debe revisarse con el diagnóstico de ese servidor.
+ComfyUI apagado, perfiles desactivados y flujos ausentes son causas diferentes.
+
+CREAR O REUTILIZAR EL TÚNEL EN LA WEB
+
+Abre https://platform.openai.com/settings/organization/tunnels
+Selecciona la organización correcta. Reutiliza un túnel adecuado si ya existe;
+si no existe, crea uno desde esa página. Conserva su tunnel_id completo.
+
+Asocia tanto la organización de Platform como el workspace de ChatGPT donde
+vas a usarlo. Crear/editar requiere Tunnels Read + Manage; usarlo requiere
+Read + Use. Invitar una cuenta por sí solo no añade la asociación ni concede
+estos permisos. Comprueba también los permisos de plugins del workspace.
+
+Si usas una cuenta personal, selecciona su organización personal. Si no puedes
+asociar el workspace empresarial, sigue el procedimiento de soporte de la guía
+oficial [1]; no sustituyas IDs ni credenciales de otra cuenta.
+
+Obtén una API key DE RUNTIME de esa organización, con permisos para el túnel:
+https://platform.openai.com/settings/organization/api-keys
+
+No uses una admin key para mantener el cliente funcionando. No pegues claves
+en chats, capturas, archivos del repositorio ni comandos con el valor literal.
+
+VENTANA 3 DE CMD: PREPARAR TUNNEL-CLIENT
+
+Descarga el cliente oficial para Windows desde la página Tunnels o desde:
+https://github.com/openai/tunnel-client/releases/latest
+
+Elige el archivo Windows apropiado para tu equipo, extráelo en una carpeta
+fuera del repo y conserva juntos los archivos del paquete. Ejemplo:
+C:\herramientas\tunnel-client\tunnel-client.exe
+
+Si ya lo tienes instalado, utiliza esa copia y comprueba su ayuda:
+
+  cd /d "C:\herramientas\tunnel-client"
+  tunnel-client.exe --version
+  tunnel-client.exe help quickstart
+
+Solo para crear un perfil nuevo, sustituye TU_TUNNEL_ID por el identificador
+completo que copiaste de Platform (no es la API key):
+
+  tunnel-client.exe init --sample sample_mcp_remote_no_auth --profile fruti-local --tunnel-id TU_TUNNEL_ID --mcp-server-url http://127.0.0.1:8766/mcp
+
+Si ya existe el perfil, revísalo con la ayuda del cliente y reutilízalo; no
+lo recrees a ciegas. La URL debe coincidir con el puerto del MCP que arrancaste.
+Este perfil es para el MCP local de prompts, que no solicita OAuth.
+
+Para introducir la clave de forma oculta y ejecutar diagnóstico + túnel,
+copia LA SIGUIENTE LÍNEA COMPLETA en CMD. Python pedirá la clave aparte; no
+aparecerá mientras la escribes. Se pasa solo al entorno de los procesos hijos:
+
+  py -3.12 -c "import getpass,os,subprocess; e=os.environ.copy(); e['CONTROL_PLANE_API_KEY']=getpass.getpass('API key de runtime del tunel: '); r=subprocess.run([r'.\tunnel-client.exe','doctor','--profile','fruti-local','--explain'],env=e); raise SystemExit(r.returncode or subprocess.call([r'.\tunnel-client.exe','run','--profile','fruti-local','--health.listen-addr','127.0.0.1:8080'],env=e))"
+
+Si doctor falla, run no se ejecuta. Corrige el diagnóstico y repite la línea.
+Si todo va bien, deja la ventana abierta. Ctrl+C detiene el túnel. No uses
+setx para guardar esta clave ni la escribas dentro del perfil YAML.
+
+En otra ventana de CMD puedes comprobar el cliente:
+
+  curl.exe --fail http://127.0.0.1:8080/healthz
+  curl.exe --fail http://127.0.0.1:8080/readyz
+  start "" http://127.0.0.1:8080/ui
+
+Estos son indicadores del túnel, no pruebas de generación GPU. Si 8080 ya
+está ocupado, elige otro puerto en --health.listen-addr y en esas tres URLs.
+El cliente necesita conexión HTTPS saliente a OpenAI y acceso al MCP local.
+La PC debe permanecer encendida y sin suspenderse durante el uso.
+
+AÑADIR EL MCP EN CHATGPT WEB
+
+1. Abre https://chatgpt.com/plugins con la cuenta y el workspace elegidos.
+2. Pulsa + y Add custom MCP server.
+3. Nombre sugerido: Fruti.cap Prompts. En Connection selecciona Tunnel.
+4. Elige tu túnel o introduce el mismo tunnel_id completo del perfil.
+5. Para ESTE servidor de prompts, selecciona No authentication: la API key
+   introducida antes autentica tunnel-client, no es una contraseña de este MCP.
+   Si reutilizas otro servidor que exige OAuth, configura su autenticación real.
+6. Lee el aviso y marca I understand and want to continue si confías en el
+   servidor que has iniciado. Pulsa Create as a plugin e instálalo.
+7. Abre un chat nuevo, escribe @ y selecciona Fruti.cap Prompts.
+
+No introduzcas 127.0.0.1 como una URL pública en ChatGPT web: esa dirección
+se usa entre tunnel-client y el MCP en tu PC. En ChatGPT eliges el túnel.
+
+PRUEBA DE CONEXIÓN Y DE LECTURA DE SKILLS
+
+Con el plugin seleccionado, pide:
+
+  Usa Fruti.cap Prompts. Llama a get_directing_guidance con task="animation",
+  preset="frutinovelas" e include_example_story=false. Dime qué reglas recibiste
+  para movimiento, sombras, expresiones y diálogo. No generes un video.
+
+Verifica en los detalles de la llamada que se ejecutó la herramienta y que
+devolvió guías. Para otras historias y estilos puedes usar preset="general".
+La conexión se considera comprobada cuando esa llamada termina correctamente,
+no solo cuando aparece el nombre del plugin o cuando el túnel está healthy.
+
+REINICIO DIARIO
+
+1. Si vas a generar video, reanuda el pod y ejecuta su start.
+2. Abre iniciar.cmd para Studio si necesitas la interfaz.
+3. Abre el comando MCP de la ventana 2, con el mismo puerto.
+4. Abre la carpeta de tunnel-client y repite la línea de entrada oculta de clave.
+5. Comprueba readyz, selecciona el plugin en ChatGPT y haz una llamada de prueba.
+
+Reutiliza el túnel y su perfil. No necesitas crear un túnel cada día. Para
+detenerlos, termina primero los trabajos; después usa Ctrl+C en las ventanas.
+Detener estas ventanas de Windows no detiene ni factura menos un pod GPU:
+gestiona el pod desde su proveedor cuando termines.
+
+ERRORES HABITUALES
+
+- Connection refused al MCP: comprueba la ventana 2, el puerto y /mcp. El modo
+  stdio no abre HTTP. No concluyas por ello que ComfyUI está apagado.
+- Studio abre, pero no genera: comprueba ComfyUI/gateway, URL, autenticación,
+  modelos y flujos. El túnel y Studio pueden funcionar con la GPU apagada.
+- Túnel no aparece: revisa workspace asociado, organización y permiso Use.
+  Una asignación nueva de rol puede tardar hasta 30 minutos [1].
+- Error 401/403 del túnel: revisa la clave runtime y sus permisos. No pegues
+  la clave en soporte; comparte solo el código y un mensaje sin secretos.
+- No hay opción para añadir MCP: revisa las políticas de tu workspace con
+  su administrador. Un cambio de Git no puede conceder permisos de ChatGPT.
+- Lista de herramientas antigua: reinicia MCP, abre su conexión en Plugins,
+  pulsa Refresh, verifica la lista y prueba en un chat nuevo [3].
+- Aparece generate_image cuando esperabas las cuatro herramientas anteriores:
+  confirma qué proceso ocupa el puerto y a qué perfil/túnel apunta el plugin.
+- El asistente dice conectado sin llamada visible: pídele ejecutar la prueba
+  anterior y revisa su resultado; una respuesta en texto no acredita conexión.
+
+ALCANCE DE ESTA GUÍA
+
+Los comandos describen el repositorio y la documentación oficial consultada.
+La creación del túnel, la asociación de cuentas y la llamada real en tu PC
+deben comprobarse en tu entorno. El túnel de OpenAI se utiliza aquí con ChatGPT;
+esta guía no afirma que configure conexiones de Claude u otros clientes.
+
+FUENTES
+
+[1] OpenAI, Secure MCP Tunnel (consultado 2026-10-15):
+https://developers.openai.com/api/docs/guides/secure-mcp-tunnels
+[2] OpenAI, Add custom MCP server (consultado 2026-10-15):
+https://developers.openai.com/api/docs/guides/custom-mcp-server
+[3] OpenAI, Connect and test your plugin (consultado 2026-10-15):
+https://developers.openai.com/plugins/deploy/connect-chatgpt
+[4] Cliente oficial: onboarding y configuración (consultado 2026-10-15):
+https://github.com/openai/tunnel-client/blob/master/docs/onboarding.md
+https://github.com/openai/tunnel-client/blob/master/docs/configuration.md
+[5] Código de esta entrega: src/frutinovelas/mcp_server.py, iniciar.cmd,
+actualizar.cmd, scripts/fruti_remote.py y docs/RUNPOD.md.

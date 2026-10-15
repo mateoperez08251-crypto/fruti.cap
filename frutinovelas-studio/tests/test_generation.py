@@ -333,3 +333,210 @@ def test_connection_rejects_url_credentials(client):
         client.put("/api/v1/comfy/connection", json={"url": "http://example.com", "token": TOKEN}).status_code
         == 422
     )
+
+
+def test_request_retry_keeps_original_snapshot_after_scene_edit(client, remote):
+    connect(client)
+    original = scene(client)
+    job = submit(client, original).json()
+    updated = client.patch(
+        "/api/v1/scenes/" + original["id"],
+        json={"expected_revision": original["revision"], "prompt": "Una revisión diferente"},
+    ).json()
+    retry = submit(client, original, job["id"])
+    assert retry.status_code == 202
+    assert retry.json()["id"] == job["id"]
+    assert retry.json()["revision_number"] == original["revision_number"]
+    # An idempotency key cannot silently start or refer to a different revision.
+    assert submit(client, updated, job["id"]).status_code == 422
+    assert remote.posts == []
+
+
+@pytest.mark.parametrize("new_state", ["uploading", "unknown", "running"])
+def test_abandon_does_not_close_job_that_worker_already_claimed(client, remote, monkeypatch, new_state):
+    from frutinovelas.services import generation
+
+    connect(client)
+    job = submit(client, scene(client)).json()
+    original_transition = generation.transition
+
+    def raced_transition(factory, job_id, state, *args, **kwargs):
+        # Simulate worker claiming queued work between the route's SELECT and UPDATE.
+        assert original_transition(factory, job_id, new_state, expected_states=("queued",))
+        return original_transition(factory, job_id, state, *args, **kwargs)
+
+    monkeypatch.setattr(generation, "transition", raced_transition)
+    response = client.post("/api/v1/generations/" + job["id"] + "/abandon")
+    assert response.status_code == 409
+    with session_factory()() as db:
+        stored = db.get(GenerationJob, job["id"])
+        assert stored.state == new_state
+        assert stored.active_scene_id == stored.scene_id
+
+
+@pytest.mark.parametrize("payload", [b"temporary proxy error", b"[]", b"null"])
+def test_malformed_gateway_json_preserves_job_and_recovers(client, remote, monkeypatch, payload):
+    connect(client)
+    original = scene(client)
+    job = submit(client, original).json()
+    worker = GenerationWorker(client_factory=remote.client)
+    worker.tick()
+    original_handle = remote.handle
+
+    def broken_history(request):
+        if request.url.path.startswith("/history/"):
+            return httpx.Response(200, content=payload)
+        return original_handle(request)
+
+    monkeypatch.setattr(remote, "handle", broken_history)
+    # Run exactly one real polling cycle, including its error policy.
+    monkeypatch.setattr(worker.stop_event, "wait", lambda _timeout: worker.stop_event.set())
+    worker.run()
+    status = client.get("/api/v1/generations/" + job["id"]).json()
+    assert status["state"] == "running"
+    assert "gateway" in status["error"]
+    assert submit(client, original).json()["id"] == job["id"]
+    monkeypatch.setattr(remote, "handle", original_handle)
+    remote.done = True
+    recovery = GenerationWorker(client_factory=remote.client)
+    try:
+        recovery.tick()
+    finally:
+        recovery.stop()
+    assert len(remote.posts) == 1
+    assert client.get("/api/v1/generations/" + job["id"]).json()["state"] == "completed"
+
+
+def test_unexpected_download_error_remains_recoverable_without_second_inference(client, remote, monkeypatch):
+    from pathlib import Path
+
+    connect(client)
+    original = scene(client)
+    job = submit(client, original).json()
+    worker = GenerationWorker(client_factory=remote.client)
+    worker.tick()
+    remote.done = True
+    original_replace = Path.replace
+
+    def full_disk(path, target):
+        if path.name.endswith(".mp4.part"):
+            raise OSError("simulated destination unavailable")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", full_disk)
+    monkeypatch.setattr(worker.stop_event, "wait", lambda _timeout: worker.stop_event.set())
+    worker.run()
+    assert client.get("/api/v1/generations/" + job["id"]).json()["state"] == "unknown"
+    assert submit(client, original).json()["id"] == job["id"]
+    monkeypatch.setattr(Path, "replace", original_replace)
+    recovery = GenerationWorker(client_factory=remote.client)
+    try:
+        recovery.tick()
+    finally:
+        recovery.stop()
+    assert len(remote.posts) == 1
+    assert client.get("/api/v1/generations/" + job["id"]).json()["state"] == "completed"
+
+
+def test_shutdown_during_upload_does_not_submit_and_cleans_prepared_frames(client, remote, monkeypatch):
+    from frutinovelas.config import get_settings
+
+    connect(client)
+    job = submit(client, scene(client)).json()
+    worker = GenerationWorker(client_factory=remote.client)
+    original_upload = ComfyClient.upload
+
+    def stop_after_upload(connection, path):
+        result = original_upload(connection, path)
+        worker.stop_event.set()
+        return result
+
+    monkeypatch.setattr(ComfyClient, "upload", stop_after_upload)
+    try:
+        worker.tick()
+    finally:
+        worker.stop()
+    assert remote.posts == []
+    assert client.get("/api/v1/generations/" + job["id"]).json()["state"] == "uploading"
+    assert list(get_settings().tmp_dir.glob(job["id"] + "-*.png")) == []
+
+
+def test_reference_orientation_matches_exif_and_original_is_untouched(client, remote, monkeypatch):
+    import io
+
+    from PIL import Image
+
+    connect(client)
+    original_scene = scene(client, end=False)
+    image = Image.new("RGB", (112, 64), "red")
+    image.paste("blue", (56, 0, 112, 64))
+    exif = image.getexif()
+    exif[274] = 6  # Rotate clockwise when displayed by browsers/cameras.
+    content = io.BytesIO()
+    image.save(content, format="JPEG", exif=exif)
+    original_bytes = content.getvalue()
+    asset = client.post("/api/v1/assets", files={"file": ("camera.jpg", original_bytes, "image/jpeg")}).json()
+    updated = client.patch(
+        "/api/v1/scenes/" + original_scene["id"],
+        json={"expected_revision": original_scene["revision"], "start_asset_id": asset["id"]},
+    ).json()
+    submit(client, updated)
+    original_upload = ComfyClient.upload
+
+    def inspect_reference(connection, path):
+        with Image.open(path) as prepared:
+            assert prepared.size == (576, 1024)
+            top, bottom = prepared.getpixel((288, 100)), prepared.getpixel((288, 924))
+            assert top[0] > 200 and top[2] < 30
+            assert bottom[2] > 200 and bottom[0] < 30
+        return original_upload(connection, path)
+
+    monkeypatch.setattr(ComfyClient, "upload", inspect_reference)
+    worker = GenerationWorker(client_factory=remote.client)
+    try:
+        worker.tick()
+    finally:
+        worker.stop()
+    assert client.get("/api/v1/assets/" + asset["id"] + "/content").content == original_bytes
+
+
+def test_connection_rejects_malformed_workflow_node_without_server_error(client, remote):
+    graph = workflow()
+    graph["9"] = []
+    remote.raw = json.dumps(graph).encode()
+    remote.identity["workflows"][FILENAME] = hashlib.sha256(remote.raw).hexdigest()
+    assert client.put("/api/v1/comfy/connection", json={"url": URL, "token": TOKEN}).status_code == 422
+
+
+def test_gateway_redirect_is_rejected_without_following_or_leaking_token(data_dir):
+    from frutinovelas.services.comfy import ComfyError
+
+    seen = []
+
+    def redirect(request):
+        seen.append(str(request.url))
+        return httpx.Response(302, headers={"Location": "https://other.example/collect"})
+
+    connection = ComfyClient(URL, TOKEN, transport=httpx.MockTransport(redirect))
+    try:
+        with pytest.raises(ComfyError) as error:
+            connection.get("/system_stats")
+        assert error.value.status_code == 302
+        assert TOKEN not in str(error.value)
+    finally:
+        connection.close()
+    assert seen == [URL + "/system_stats"]
+
+
+def test_gateway_uses_configured_network_timeouts(data_dir, monkeypatch):
+    from frutinovelas.config import reset_settings_cache
+
+    monkeypatch.setenv("FRUTINOVELAS_COMFY_CONNECT_TIMEOUT", "2")
+    monkeypatch.setenv("FRUTINOVELAS_COMFY_REQUEST_TIMEOUT", "7")
+    reset_settings_cache()
+    connection = ComfyClient(URL, TOKEN, transport=httpx.MockTransport(lambda _: httpx.Response(200)))
+    try:
+        assert connection.client.timeout.connect == 2
+        assert connection.client.timeout.read == 7
+    finally:
+        connection.close()

@@ -34,12 +34,13 @@ type CardProps = {
   index: number
   total: number
   selected: boolean
+  reordering: boolean
   onSelect: () => void
   onMove: (delta: -1 | 1) => void
 }
 
-function SceneCard({ scene, index, total, selected, onSelect, onMove }: CardProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: scene.id })
+function SceneCard({ scene, index, total, selected, reordering, onSelect, onMove }: CardProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: scene.id, disabled: reordering })
   const style = { transform: CSS.Transform.toString(transform), transition }
 
   return (
@@ -55,6 +56,7 @@ function SceneCard({ scene, index, total, selected, onSelect, onMove }: CardProp
     >
       <button
         className="drag-handle"
+        disabled={reordering}
         {...attributes}
         {...listeners}
         aria-label={`Arrastrar escena ${index + 1} para reordenar`}
@@ -87,7 +89,7 @@ function SceneCard({ scene, index, total, selected, onSelect, onMove }: CardProp
           <button
             className="btn btn-ghost btn-icon btn-sm"
             style={{ width: 22, height: 22 }}
-            disabled={index === 0}
+            disabled={reordering || index === 0}
             aria-label="Subir escena"
             title="Subir"
             onClick={(e) => {
@@ -100,7 +102,7 @@ function SceneCard({ scene, index, total, selected, onSelect, onMove }: CardProp
           <button
             className="btn btn-ghost btn-icon btn-sm"
             style={{ width: 22, height: 22 }}
-            disabled={index === total - 1}
+            disabled={reordering || index === total - 1}
             aria-label="Bajar escena"
             title="Bajar"
             onClick={(e) => {
@@ -119,11 +121,12 @@ function SceneCard({ scene, index, total, selected, onSelect, onMove }: CardProp
 type ListProps = {
   scenes: Scene[]
   selectedId: string | null
+  reordering: boolean
   onSelect: (id: string) => void
   onReorder: (ids: string[]) => void
 }
 
-export function SceneList({ scenes, selectedId, onSelect, onReorder }: ListProps) {
+export function SceneList({ scenes, selectedId, reordering, onSelect, onReorder }: ListProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -131,10 +134,10 @@ export function SceneList({ scenes, selectedId, onSelect, onReorder }: ListProps
   const ids = scenes.map((s) => s.id)
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
-    if (!over || active.id === over.id) return
+    if (reordering || !over || active.id === over.id) return
     const from = ids.indexOf(String(active.id))
     const to = ids.indexOf(String(over.id))
-    onReorder(arrayMove(ids, from, to))
+    if (from >= 0 && to >= 0) onReorder(arrayMove(ids, from, to))
   }
 
   const move = (index: number, delta: -1 | 1) => onReorder(arrayMove(ids, index, index + delta))
@@ -146,6 +149,7 @@ export function SceneList({ scenes, selectedId, onSelect, onReorder }: ListProps
           <SceneCard
             key={s.id}
             scene={s}
+            reordering={reordering}
             index={i}
             total={scenes.length}
             selected={s.id === selectedId}

@@ -245,9 +245,9 @@ def vivo(pid) -> bool:
 
 def lanzar(nombre: str, cmd: list[str], log: Path, cwd: Path | None = None, env: dict | None = None) -> subprocess.Popen:
     """Proceso en su propia sesión: sobrevive al cierre de la terminal SSH."""
-    fh = open(log, "ab")
-    p = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=fh, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                         start_new_session=True)
+    with open(log, "ab") as fh:
+        p = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=fh, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,  # noqa: S603 - argv construido por el kit, sin shell
+                             start_new_session=True)
     guardar_proc(nombre, p.pid)
     return p
 
@@ -539,7 +539,7 @@ def arrancar_comfy() -> tuple[dict, dict]:
 
 
 def exportar(ui_path: Path, out_path: Path) -> dict:
-    r = subprocess.run([sys.executable, str(KIT_DIR / "scripts" / "export_workflow_api.py"), "--comfy", LOCAL,
+    r = subprocess.run([sys.executable, str(KIT_DIR / "scripts" / "export_workflow_api.py"), "--comfy", LOCAL,  # noqa: S603 - script local y argv, sin shell
                         "--ui", str(ui_path), "--out", str(out_path)], capture_output=True, text=True)
     say("  " + r.stdout.strip())
     if r.returncode != 0:
@@ -556,8 +556,10 @@ def exportar_y_validar(object_info: dict, forzar: bool) -> dict:
     clave = {"commit": COMFY_COMMIT, "ui_sha256": prof["workflow_ui_sha256"], "perfiles": perfiles_activos(c),
              "kit": VERSION}
     previo = load_json(INFORME_FILE)
-    if (not forzar and previo and previo.get("clave") == clave
-            and all((API_DIR / n).exists() for n in previo.get("flujos", {}))):
+    esperados = set(prof["workflow_api_files"].values()) | {
+        NOMBRES_QWEN[p] for p in perfiles_activos(c) if p in NOMBRES_QWEN
+    }
+    if not forzar and cache_exportacion_valida(previo, clave, esperados, object_info):
         say("Flujos API ya exportados para esta versión y perfiles (usa --reexportar para repetir).")
         return previo
 
@@ -623,6 +625,24 @@ def exportar_y_validar(object_info: dict, forzar: bool) -> dict:
     return informe
 
 
+def cache_exportacion_valida(informe: dict | None, clave: dict, esperados: set[str], object_info: dict) -> bool:
+    """Reutilizar solo archivos íntegros y compatibles con el servidor de ahora."""
+    if (not isinstance(informe, dict) or informe.get("clave") != clave
+            or not isinstance(informe.get("flujos"), dict) or set(informe["flujos"]) != esperados):
+        return False
+    for nombre, datos in informe["flujos"].items():
+        path = API_DIR / nombre
+        try:
+            body = path.read_bytes()
+            if hashlib.sha256(body).hexdigest() != datos.get("sha256"):
+                return False
+            if vw.validate_api_graph(json.loads(body), object_info)["errors"]:
+                return False
+        except (OSError, ValueError, TypeError, AttributeError):
+            return False
+    return True
+
+
 def obtener_token() -> tuple[str, str]:
     tok = (os.environ.get("FRUTI_GATEWAY_TOKEN") or "").strip()
     origen = "variable FRUTI_GATEWAY_TOKEN"
@@ -661,14 +681,28 @@ def escribir_identidad(stats: dict, informe: dict) -> dict:
         "pruebas": previo.get("pruebas", {}),
         "actualizado": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
+    # Una prueba de otros pesos o flujos no certifica la configuración actual.
+    if any(previo.get(k) != ident[k] for k in ("comfyui_commit", "perfiles", "workflows", "modelos")):
+        ident["estado_compatibilidad"] = "pendiente_prueba_real"
+        ident["pruebas"] = {}
     save_json(IDENTITY_FILE, ident)
     return ident
+
+
+def registrar_prueba(nombre: str, resultado: dict) -> None:
+    ident = load_json(IDENTITY_FILE, {}) or {}
+    ident.setdefault("pruebas", {})[nombre] = resultado
+    ident["estado_compatibilidad"] = (
+        "prueba_real_ok" if all(v.get("ok") for v in ident["pruebas"].values()) else "prueba_real_fallida"
+    )
+    save_json(IDENTITY_FILE, ident)
 
 
 def arrancar_gateway(token: str, acceso: str) -> None:
     titulo("Gateway con token (puerto 8189)")
     listen = "0.0.0.0" if acceso == "runpod_proxy" else "127.0.0.1"
-    if gw_vivo() and estado().get("gateway_listen") != listen:
+    if gw_vivo() and (estado().get("gateway_listen") != listen or
+                     http_status(GW + "/frutinovelas/identity", {"Authorization": f"Bearer {token}"}) == 401):
         detener("gateway")
         time.sleep(1)
     if not gw_vivo():
@@ -878,7 +912,7 @@ def cmd_test(a) -> None:
         d = ImageDraw.Draw(img)
         for y in range(h):
             t = y / (h - 1)
-            d.line([(0, y), (w, y)], fill=tuple(int(x + (z - x) * t) for x, z in zip(c1, c2)))
+            d.line([(0, y), (w, y)], fill=tuple(int(x + (z - x) * t) for x, z in zip(c1, c2, strict=True)))
         d.ellipse([w // 2 - 120, h // 2 - 120, w // 2 + 120, h // 2 + 120], fill=(230, 40, 70))
         d.text((40, 60), texto, fill=(255, 255, 255))
         img.save(path)
@@ -932,13 +966,6 @@ def cmd_test(a) -> None:
                         rutas.append(destino)
         return rutas
 
-    def registrar(nombre: str, res: dict) -> None:
-        ident = load_json(IDENTITY_FILE, {}) or {}
-        ident.setdefault("pruebas", {})[nombre] = res
-        if all(v.get("ok") for v in ident["pruebas"].values()):
-            ident["estado_compatibilidad"] = "prueba_real_ok"
-        save_json(IDENTITY_FILE, ident)
-
     modos = ["i2va", "fl2va"] if a.modo == "ambos" else ([] if a.modo == "ninguno" else [a.modo])
     for modo in modos:
         frames, seg = vw.quantize_frames(a.segundos, prof["duration_rule"])
@@ -956,7 +983,7 @@ def cmd_test(a) -> None:
         videos = [p for p in salidas if p.suffix.lower() in (".mp4", ".webm", ".mov")]
         if not videos:
             fail(f"No se encontró vídeo en las salidas: {salidas}")
-        r = subprocess.run(["ffprobe", "-v", "error", "-count_frames", "-show_entries",
+        r = subprocess.run(["ffprobe", "-v", "error", "-count_frames", "-show_entries",  # noqa: S603 - argv sin shell
                             "stream=codec_type,width,height,nb_read_frames:format=duration", "-of", "json", str(videos[0])],
                            capture_output=True, text=True)
         info = json.loads(r.stdout or "{}")
@@ -967,7 +994,7 @@ def cmd_test(a) -> None:
             f"{float(info.get('format', {}).get('duration', 0)):.2f} s · audio={'sí' if audio else 'no'}")
         if not good:
             warn(f"Frames esperados: {frames}")
-        registrar(f"h3_{modo}", {"ok": good, "segundos": a.segundos, "frames": v.get("nb_read_frames"),
+        registrar_prueba(f"h3_{modo}", {"ok": good, "segundos": a.segundos, "frames": v.get("nb_read_frames"),
                                  "tiempo_s": round(time.time() - t0), "fecha": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
         (ok if good else warn)(f"Prueba {modo} terminada. Descarga el vídeo con: runpodctl send {videos[0]}")
 
@@ -978,7 +1005,7 @@ def cmd_test(a) -> None:
         titulo("Prueba Qwen-Image-2512 (valores de la plantilla oficial)")
         t0 = time.time()
         imgs = descargar(esperar(encolar(load_json(ruta))))
-        registrar("qwen2512_t2i", {"ok": bool(imgs), "tiempo_s": round(time.time() - t0)})
+        registrar_prueba("qwen2512_t2i", {"ok": bool(imgs), "tiempo_s": round(time.time() - t0)})
         for p in imgs:
             ok(f"Imagen: {p}")
 

@@ -98,8 +98,8 @@ El comando que antes apuntaba a un módulo ausente tiene implementación:
 py -3 -m uv run frutinovelas-mcp
 ```
 
-Usa el SDK **MCP 2.x** del proyecto, `MCPServer` y transporte **stdio**, para clientes que
-lanzan procesos locales. Expone cuatro herramientas:
+Usa el SDK **MCP 2.x** del proyecto, `MCPServer` y transporte **stdio** por defecto, para clientes que
+lanzan procesos locales. También admite **Streamable HTTP** local para túneles privados. Expone cuatro herramientas:
 
 | Herramienta | Uso |
 |---|---|
@@ -139,10 +139,18 @@ Ejemplo para un cliente local compatible con `mcpServers`:
 ```
 
 Sustituir la ruta por la carpeta que contiene `pyproject.toml`; `uv` debe estar en el PATH del
-cliente. No abrir puertos ni publicar stdio. Esta entrega **no crea una URL MCP remota ni
-conecta ChatGPT web**. Tampoco expone lectura/escritura de escenas, render, generación Qwen o
-montaje mediante MCP. Para usar las guías en ChatGPT ahora, cargar los `.md` y las referencias,
-o usar un cliente local compatible.
+cliente. No publicar stdio como una URL. Para conectar mediante un túnel privado:
+
+```cmd
+py -3.12 -m uv run --frozen frutinovelas-mcp --transport streamable-http --host 127.0.0.1 --port 8766
+```
+
+El endpoint es `/mcp`. El servidor solo acepta bind en loopback y mantiene las comprobaciones
+de Host/Origin del SDK. Usa sesiones HTTP sin estado; cada llamada vuelve a leer las guías.
+La conexión con ChatGPT requiere configurar el túnel y el plugin conforme a
+[la guía de CMD](CONEXION_MCP_Y_TUNNEL.txt). Cambiar `--port` si ya existe otro MCP en 8766.
+No requiere ComfyUI. Tampoco expone lectura/escritura de escenas, render, generación Qwen o
+montaje mediante MCP. Una conexión MCP correcta no verifica el estado del servidor de inferencia.
 
 Los documentos se incluyen en el paquete Python: las guías siguen disponibles en una instalación
 de la wheel sin depender de una carpeta `.agents` externa.

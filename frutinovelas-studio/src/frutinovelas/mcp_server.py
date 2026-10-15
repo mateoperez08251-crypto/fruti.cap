@@ -1,5 +1,7 @@
 """MCP local de preparación de prompts. No accede a escenas ni ejecuta generaciones."""
 
+import argparse
+import ipaddress
 import json
 
 from mcp.server.mcpserver import MCPServer
@@ -71,8 +73,37 @@ def create_server() -> MCPServer:
     return server
 
 
-def main() -> int:
-    create_server().run(transport="stdio")
+def _loopback_host(value: str) -> str:
+    if value == "localhost":
+        return "127.0.0.1"
+    try:
+        if ipaddress.ip_address(value).is_loopback:
+            return value
+    except ValueError:
+        pass
+    raise argparse.ArgumentTypeError("Usa una dirección loopback, por ejemplo 127.0.0.1; conecta mediante un túnel privado.")
+
+
+def _port(value: str) -> int:
+    try:
+        number = int(value)
+        if 1 <= number <= 65535:
+            return number
+    except ValueError:
+        pass
+    raise argparse.ArgumentTypeError("El puerto debe estar entre 1 y 65535.")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="MCP de guías y prompts, independiente de ComfyUI.")
+    parser.add_argument("--transport", choices=["stdio", "streamable-http"], default="stdio")
+    parser.add_argument("--host", type=_loopback_host, default="127.0.0.1")
+    parser.add_argument("--port", type=_port, default=8766)
+    args = parser.parse_args(argv)
+    options = {}
+    if args.transport == "streamable-http":
+        options = {"host": args.host, "port": args.port, "streamable_http_path": "/mcp", "stateless_http": True}
+    create_server().run(transport=args.transport, **options)
     return 0
 
 

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from frutinovelas.models import Asset, AuditEvent, Chapter, Scene, SceneRevision
+from frutinovelas.models import Asset, AuditEvent, Chapter, GenerationJob, Scene, SceneRevision
 from frutinovelas.schemas import AssetOut, SceneCreate, SceneOut, SceneUpdate
 
 # Campos cuya modificación crea una SceneRevision nueva.
@@ -27,6 +27,10 @@ class Conflict(RuntimeError):
 
 
 class Invalid(ValueError):
+    pass
+
+
+class ActiveGenerationConflict(RuntimeError):
     pass
 
 
@@ -216,6 +220,26 @@ def reorder_scenes(session: Session, chapter: Chapter, scene_ids: list[str], act
 def delete_scene(session: Session, scene: Scene, actor: str = "ui") -> None:
     chapter_id = scene.chapter_id
     audit(session, "scene.deleted", "scene", scene.id, actor, title=scene.title)
+    # The audit write acquires SQLite's writer lock before checking jobs, so an
+    # enqueue cannot slip between the check and the cascading scene deletion.
+    # The caller rolls back this audit together with a rejected deletion.
+    session.flush()
+    active = session.scalar(
+        select(GenerationJob.id)
+        .where(
+            GenerationJob.scene_id == scene.id,
+            or_(
+                GenerationJob.active_scene_id.is_not(None),
+                GenerationJob.state.not_in(("completed", "failed")),
+            ),
+        )
+        .limit(1)
+    )
+    if active is not None:
+        raise ActiveGenerationConflict(
+            "La escena tiene una generación activa o pendiente de confirmar. "
+            "Espera a que termine antes de borrarla."
+        )
     session.delete(scene)
     session.flush()
     remaining = session.scalars(select(Scene).where(Scene.chapter_id == chapter_id).order_by(Scene.order_index))

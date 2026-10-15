@@ -27,6 +27,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.orm.exc import StaleDataError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from frutinovelas import __version__
@@ -102,6 +103,13 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.exception_handler(StaleDataError)
+    async def concurrent_edit(_request: Request, _exc: StaleDataError):
+        return JSONResponse(
+            {"detail": "El registro cambió mientras lo editabas. Recarga y vuelve a intentarlo."},
+            status_code=409,
+        )
 
     @app.middleware("http")
     async def require_token(request: Request, call_next):

@@ -194,10 +194,10 @@ export const api = {
     request<Scene[]>(`/chapters/${chapterId}/scene-order`, json('PUT', { scene_ids: sceneIds })),
   revisions: (sceneId: string) => request<SceneRevision[]>(`/scenes/${sceneId}/revisions`),
 
-  uploadAsset: (file: File) => {
+  uploadAsset: (file: File, signal?: AbortSignal) => {
     const fd = new FormData()
     fd.append('file', file)
-    return request<Asset>('/assets', { method: 'POST', body: fd })
+    return request<Asset>('/assets', { method: 'POST', body: fd, signal })
   },
 }
 
