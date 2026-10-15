@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from frutinovelas.models import Asset, AuditEvent, Chapter, GenerationJob, Scene, SceneRevision
 from frutinovelas.schemas import AssetOut, SceneCreate, SceneOut, SceneUpdate
+from frutinovelas.services.characters import scene_parameters
 
 # Campos cuya modificación crea una SceneRevision nueva.
 REVISION_FIELDS = ("prompt", "duration_seconds", "start_asset_id", "end_asset_id", "parameters")
@@ -34,8 +35,12 @@ class ActiveGenerationConflict(RuntimeError):
     pass
 
 
-def audit(session: Session, event: str, entity_type: str, entity_id: str, actor: str = "ui", **detail: Any) -> None:
-    session.add(AuditEvent(event=event, actor=actor, entity_type=entity_type, entity_id=entity_id, detail=detail))
+def audit(
+    session: Session, event: str, entity_type: str, entity_id: str, actor: str = "ui", **detail: Any
+) -> None:
+    session.add(
+        AuditEvent(event=event, actor=actor, entity_type=entity_type, entity_id=entity_id, detail=detail)
+    )
 
 
 def _check_asset(session: Session, asset_id: str | None) -> None:
@@ -135,6 +140,10 @@ def list_scenes(session: Session, chapter_id: str) -> list[Scene]:
 
 
 def create_scene(session: Session, chapter: Chapter, data: SceneCreate, actor: str = "ui") -> Scene:
+    try:
+        parameters = scene_parameters(session, chapter.id, data.parameters.model_dump(exclude_none=True))
+    except ValueError as exc:
+        raise Invalid(str(exc)) from exc
     _check_asset(session, data.start_asset_id)
     _check_asset(session, data.end_asset_id)
     if data.end_asset_id and not data.start_asset_id:
@@ -154,7 +163,7 @@ def create_scene(session: Session, chapter: Chapter, data: SceneCreate, actor: s
             duration_seconds=data.duration_seconds,
             start_asset_id=data.start_asset_id,
             end_asset_id=data.end_asset_id,
-            parameters=data.parameters.model_dump(exclude_none=True),
+            parameters=parameters,
             author=actor,
         )
     )
@@ -194,7 +203,15 @@ def update_scene(session: Session, scene: Scene, data: SceneUpdate, actor: str =
         _check_asset(session, data.end_asset_id)
         new_values["end_asset_id"] = data.end_asset_id
     if "parameters" in sent and data.parameters is not None:
-        new_values["parameters"] = data.parameters.model_dump(exclude_none=True)
+        try:
+            new_values["parameters"] = scene_parameters(
+                session,
+                scene.chapter_id,
+                {**new_values["parameters"], **data.parameters.model_dump(exclude_unset=True)},
+                current.parameters if current else None,
+            )
+        except ValueError as exc:
+            raise Invalid(str(exc)) from exc
 
     if new_values["end_asset_id"] and not new_values["start_asset_id"]:
         raise Invalid("Una imagen final requiere imagen inicial.")
@@ -274,6 +291,8 @@ def delete_scene(session: Session, scene: Scene, actor: str = "ui") -> None:
         )
     session.delete(scene)
     session.flush()
-    remaining = session.scalars(select(Scene).where(Scene.chapter_id == chapter_id).order_by(Scene.order_index))
+    remaining = session.scalars(
+        select(Scene).where(Scene.chapter_id == chapter_id).order_by(Scene.order_index)
+    )
     for i, s in enumerate(remaining, start=1):
         s.order_index = i

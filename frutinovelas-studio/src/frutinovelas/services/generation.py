@@ -19,6 +19,8 @@ def enqueue(session, scene_id, expected_revision, request_id):
     scene = scenes.load_scene(session, scene_id)
     existing = session.get(GenerationJob, request_id)
     if existing:
+        if existing.kind != "video":
+            raise ComfyError("El ID de petición pertenece a una generación de imagen.")
         if existing.scene_id != scene_id:
             raise ComfyError("El ID de petición pertenece a otra escena.")
         if existing.snapshot["scene_revision"] != expected_revision:
@@ -29,6 +31,8 @@ def enqueue(session, scene_id, expected_revision, request_id):
         raise scenes.Conflict(scene.revision)
     existing = session.scalar(select(GenerationJob).where(GenerationJob.active_scene_id == scene_id))
     if existing:
+        if existing.kind != "video":
+            raise ComfyError("Esta escena tiene una imagen en generación. Espera a que termine.")
         return existing
     rev = scene.current
     if not rev or not rev.prompt.strip() or not rev.start_asset_id:
@@ -70,17 +74,29 @@ def enqueue(session, scene_id, expected_revision, request_id):
         session.rollback()
         existing = session.get(GenerationJob, request_id)
         if existing:
-            if existing.scene_id != scene_id or existing.snapshot["scene_revision"] != expected_revision:
+            if (
+                existing.kind != "video"
+                or existing.scene_id != scene_id
+                or existing.snapshot["scene_revision"] != expected_revision
+            ):
                 raise ComfyError("El ID de petición pertenece a otra escena o revisión.") from None
             return existing
         existing = session.scalar(select(GenerationJob).where(GenerationJob.active_scene_id == scene_id))
         if existing:
+            if existing.kind != "video":
+                raise ComfyError(
+                    "Esta escena tiene una imagen en generación. Espera a que termine."
+                ) from None
             return existing
         raise
     return job
 
 
 def public_job(job):
+    if getattr(job, "kind", "video") == "image":
+        from frutinovelas.services.image_generation import public_image_job
+
+        return public_image_job(job)
     # Do not serialize the snapshot or encrypted credentials to a browser/MCP client.
     return _public_job(
         id=job.id,
@@ -111,7 +127,7 @@ def list_public_jobs(session, scene_id):
             GenerationJob.snapshot["duration"].as_float().label("duration"),
             GenerationJob.snapshot["seed"].as_integer().label("seed"),
         )
-        .where(GenerationJob.scene_id == scene_id)
+        .where(GenerationJob.scene_id == scene_id, GenerationJob.kind == "video")
         .order_by(GenerationJob.created_at.desc())
     )
     return [_public_job(**row) for row in rows.mappings()]

@@ -12,6 +12,11 @@ GUIDES = {
     "preferences": ("FRUTINOVELAS_PREFERENCES.md", "Preferencias habituales de frutinovelas"),
     "visual-direction": ("VISUAL_DIRECTION.md", "Luz, sombras, actuación, física y cámara"),
     "models": ("MODEL_COMPATIBILITY.md", "Capacidades reales de los perfiles del repositorio"),
+    "scene-timing": (
+        "GUIA_ESCENAS_Y_DURACION.md",
+        "Duración por prompt, diálogo, cámaras y fotogramas inicio/final",
+    ),
+    "scene-workflow": ("PERSONAJES_Y_ESCENAS.md", "Biblioteca, preparación y generación manual/automática"),
     "usage": ("PROMPT_STUDIO.md", "CLI, API, MCP y esquemas de prompts"),
     "research": ("PROMPT_RESEARCH.md", "Fuentes primarias y alcance de la investigación"),
     "chatgpt-director": ("CHATGPT_DIRECTOR.md", "Instrucciones portables para un chat"),
@@ -59,6 +64,8 @@ def get_guidance(
     if include_example_story and preset != "frutinovelas":
         raise ValueError("La historia de ejemplo pertenece al preset frutinovelas.")
     keys = ["director-core", "visual-direction", "models", f"skill-{task}"]
+    if task in ("story", "animation", "review"):
+        keys.append("scene-timing")
     if preset == "frutinovelas":
         keys.append("preferences")
     if include_example_story:

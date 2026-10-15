@@ -4,7 +4,7 @@ import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-
 import { afterEach, expect, test, vi } from 'vitest'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import App from '../App'
-import { api, type Asset, type Chapter, type Generation, type Project, type Scene } from '../api'
+import { api, type Asset, type Chapter, type Character, type Generation, type ImageGeneration, type Project, type Scene } from '../api'
 import { ToastProvider } from '../components/Toast'
 
 const asset: Asset = { id: 'a1', kind: 'image', sha256: 'abc', size_bytes: 1, mime: 'image/png', width: 576, height: 1024, original_name: 'start.png', created_at: '2026-01-01' }
@@ -28,7 +28,7 @@ function setup(overrides: Partial<typeof api> = {}) {
     chapters: async () => [chapter], scenes: async () => scenes,
     status: async () => ({ app_version: 'test', comfyui: { url: 'http://comfy', reachable: true, version: '1', detail: null }, storage: { data_dir: '/tmp', free_bytes: 999999999, low_space: false }, ffmpeg: true }),
     comfyConnection: async () => ({ url: 'http://comfy', configured: true, has_token: false, identity: {} }),
-    generations: async () => [], revisions: async () => [],
+    generations: async () => [], revisions: async () => [], characters: async () => [], imageGenerations: async () => [], chapterRenders: async () => [],
     reorderScenes: async (_id, ids) => {
       scenes = ids.map((id, i) => ({ ...scenes.find((s) => s.id === id)!, order_index: i }))
       return scenes
@@ -260,4 +260,120 @@ test('opening connection settings does not add a second system polling timer', a
   expect(status).toHaveBeenCalledOnce()
   await advance(10_000)
   expect(status).toHaveBeenCalledTimes(2)
+})
+
+async function openImagePreparation() {
+  const details = screen.getByText('1 · Personajes y prompt para crear la imagen').closest('details')!
+  details.open = true
+  fireEvent(details, new Event('toggle'))
+  await screen.findByLabelText('Prompt de imagen · Qwen')
+}
+
+const characters: Character[] = ['Darío', 'Bruno', 'Cocardo'].map((name, i) => ({
+  id: `character-${i}`, project_id: 'p1', name, description: '', revision: 1, archived: false,
+  reference_asset: { ...asset, id: `reference-${i}` },
+}))
+
+test('scene references and the image prompt save separately from the animation prompt', async () => {
+  const update = vi.fn<typeof api.updateScene>(async (_id, data) => ({ ...originals[0], revision: 2, revision_number: 2, parameters: data.parameters as Scene['parameters'] }))
+  const generate = vi.fn<typeof api.generateSceneImage>()
+  setup({ characters: async () => characters, updateScene: update, generateSceneImage: generate })
+  await screen.findByDisplayValue('Original uno')
+  await openImagePreparation()
+  fireEvent.click(await screen.findByRole('checkbox', { name: /Darío/ }))
+  fireEvent.click(screen.getByRole('checkbox', { name: /Bruno/ }))
+  expect((screen.getByRole('checkbox', { name: /Cocardo/ }) as HTMLInputElement).disabled).toBe(true)
+  edit('scene-image-prompt', 'Image literal ñ\nComposition.')
+  expect(control('scene-prompt').value).toBe('Original uno')
+  expect(control('btn-generate-image').disabled).toBe(true)
+  click('btn-save-scene')
+  await waitFor(() => expect(update).toHaveBeenCalledOnce())
+  const data = update.mock.calls[0][1]
+  expect(data.prompt).toBeUndefined()
+  expect(data.parameters).toMatchObject({ character_ids: ['character-0', 'character-1'], image_prompt: 'Image literal ñ\nComposition.' })
+  expect(generate).not.toHaveBeenCalled()
+})
+
+test('image history is read only when its preparation panel is opened', async () => {
+  const images = vi.fn<typeof api.imageGenerations>(async () => [])
+  const refs = vi.fn<typeof api.characters>(async () => characters)
+  setup({ imageGenerations: images, characters: refs })
+  await screen.findByDisplayValue('Original uno')
+  expect(images).not.toHaveBeenCalled()
+  expect(refs).not.toHaveBeenCalled()
+  await openImagePreparation()
+  await waitFor(() => expect(images).toHaveBeenCalledOnce())
+  expect(refs).toHaveBeenCalledOnce()
+})
+
+test('approving an image preserves animation text typed while approval is pending', async () => {
+  const pending = deferred<Scene>()
+  const approve = vi.fn<typeof api.approveSceneImage>(() => pending.promise)
+  const result: ImageGeneration = { id: 'image-job', scene_id: 's1', kind: 'image', state: 'completed', error: '', revision_number: 1, seed: 1, references: [], result_asset_id: 'a2', result_url: '/image.png', created_at: '2026-01-01' }
+  setup({ imageGenerations: async () => [result], approveSceneImage: approve })
+  await screen.findByDisplayValue('Original uno')
+  await openImagePreparation()
+  fireEvent.click(await screen.findByText('Aprobar y usar de inicio'))
+  await waitFor(() => expect(approve).toHaveBeenCalledOnce())
+  edit('scene-prompt', 'New text during approval')
+  await act(async () => pending.resolve({ ...originals[0], revision: 2, revision_number: 2, start_asset: { ...asset, id: 'a2' } }))
+  expect(control('scene-prompt').value).toBe('New text during approval')
+  expect(document.querySelector('#drop-start img')?.getAttribute('src')).toContain('/assets/a2/')
+  expect(control('btn-save-scene').disabled).toBe(false)
+})
+
+test('a project character can be named, uploaded and saved without starting a generation', async () => {
+  const upload = vi.fn<typeof api.uploadAsset>(async () => asset)
+  const create = vi.fn<typeof api.createCharacter>(async () => characters[0])
+  const generate = vi.fn<typeof api.generateSceneImage>()
+  setup({ uploadAsset: upload, createCharacter: create, generateSceneImage: generate })
+  await screen.findByDisplayValue('Original uno')
+  await act(async () => { await router.navigate('/proyectos/p1') })
+  const details = screen.getByText('Biblioteca de personajes · referencias para las escenas').closest('details')!
+  details.open = true
+  fireEvent(details, new Event('toggle'))
+  fireEvent.change(await screen.findByLabelText('Nombre del personaje'), { target: { value: 'Darío' } })
+  fireEvent.change(document.querySelector('#character-reference input')!, { target: { files: [new File(['png'], 'Dario.png', { type: 'image/png' })] } })
+  await waitFor(() => expect(upload).toHaveBeenCalledOnce())
+  await waitFor(() => expect((screen.getByText('Guardar personaje') as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(screen.getByText('Guardar personaje'))
+  await waitFor(() => expect(create).toHaveBeenCalledOnce())
+  expect(create).toHaveBeenCalledWith('p1', { name: 'Darío', description: '', reference_asset_id: 'a1' })
+  expect(generate).not.toHaveBeenCalled()
+})
+
+
+test('automatic image approval is optional and saving its preference never generates', async () => {
+  const update = vi.fn<typeof api.updateScene>(async (_id, data) => ({ ...originals[0], revision: 2, revision_number: 2, parameters: data.parameters as Scene['parameters'] }))
+  const generate = vi.fn<typeof api.generateSceneImage>()
+  setup({ updateScene: update, generateSceneImage: generate })
+  await screen.findByDisplayValue('Original uno')
+  await openImagePreparation()
+  expect((screen.getByLabelText('Revisión de imágenes') as HTMLSelectElement).value).toBe('manual')
+  fireEvent.change(screen.getByLabelText('Revisión de imágenes'), { target: { value: 'automatic' } })
+  click('btn-save-scene')
+  await waitFor(() => expect(update).toHaveBeenCalledOnce())
+  expect(update.mock.calls[0][1].parameters).toMatchObject({ image_approval: 'automatic' })
+  expect(generate).not.toHaveBeenCalled()
+})
+
+test('chapter generation requires explicit automatic approval and the saved revision plan', async () => {
+  const prepared = originals.map((s) => ({ ...s, parameters: { image_prompt: `Image for ${s.title}` } }))
+  const generate = vi.fn<typeof api.renderChapter>(async () => ({ id: 'run1', chapter_id: 'c1', state: 'queued', error: '', scenes: [], result_url: null }))
+  const reads = vi.fn<typeof api.chapterRenders>(async () => [])
+  setup({ scenes: async () => prepared, renderChapter: generate, chapterRenders: reads })
+  await screen.findByDisplayValue('Original uno')
+  expect(reads).not.toHaveBeenCalled()
+  const details = screen.getByText('Capítulo automático · imágenes, animación y montaje').closest('details')!
+  details.open = true
+  fireEvent(details, new Event('toggle'))
+  const button = await screen.findByText('Generar capítulo completo') as HTMLButtonElement
+  await waitFor(() => expect(reads).toHaveBeenCalledOnce())
+  expect(button.disabled).toBe(true)
+  expect(generate).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('checkbox', { name: /Aprobar automáticamente las imágenes de este proceso/ }))
+  await waitFor(() => expect(button.disabled).toBe(false))
+  fireEvent.click(button)
+  await waitFor(() => expect(generate).toHaveBeenCalledOnce())
+  expect(generate).toHaveBeenCalledWith('c1', 1, { s1: 1, s2: 1 }, expect.any(String))
 })

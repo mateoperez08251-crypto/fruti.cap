@@ -5,12 +5,14 @@ import { Link, useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../api'
 import { ConfirmDialog, PromptDialog } from '../components/Dialogs'
 import { useToast } from '../components/Toast'
+import { CharacterLibrary } from '../components/CharacterLibrary'
 
 export function ProjectPage({ projectId }: { projectId: string }) {
   const qc = useQueryClient()
   const toast = useToast()
   const navigate = useNavigate()
   const [dialog, setDialog] = useState<'chapter' | 'rename' | 'archive' | null>(null)
+  const [showCharacters, setShowCharacters] = useState(false)
 
   const project = useQuery({ queryKey: ['project', projectId], queryFn: () => api.project(projectId) })
   const chapters = useQuery({ queryKey: ['chapters', projectId], queryFn: () => api.chapters(projectId) })
@@ -81,6 +83,11 @@ export function ProjectPage({ projectId }: { projectId: string }) {
           </button>
         </div>
       </header>
+
+      <details className="card character-library" onToggle={(e) => setShowCharacters(e.currentTarget.open)}>
+        <summary>Biblioteca de personajes · referencias para las escenas</summary>
+        {showCharacters && <CharacterLibrary projectId={projectId} />}
+      </details>
 
       {chapters.data && chapters.data.length === 0 && (
         <section className="card empty">

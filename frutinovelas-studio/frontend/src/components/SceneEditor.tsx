@@ -1,13 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowRight, ChevronRight, Copy, History, Info, Loader2, RotateCcw, Save, Trash2, TriangleAlert } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { api, ApiError, type Asset, type Scene } from '../api'
+import { Link } from 'react-router-dom'
+import { api, ApiError, thumbUrl, type Asset, type Scene } from '../api'
 import { STATUS_LABEL } from '../labels'
 import { ConfirmDialog } from './Dialogs'
 import { ImageDrop, Lightbox } from './ImageDrop'
 import { useToast } from './Toast'
 import { GenerationPanel } from './GenerationPanel'
 import { PromptCheck } from './PromptCheck'
+import { SceneImagePanel } from './SceneImagePanel'
 
 type Draft = {
   title: string
@@ -18,6 +20,9 @@ type Draft = {
   end: Asset | null
   seedMode: 'random' | 'fixed'
   seed: string
+  imagePrompt: string
+  characterIds: string[]
+  imageApproval: 'manual' | 'automatic'
 }
 
 const fromScene = (s: Scene): Draft => ({
@@ -29,11 +34,15 @@ const fromScene = (s: Scene): Draft => ({
   end: s.end_asset,
   seedMode: s.parameters.seed_mode === 'fixed' ? 'fixed' : 'random',
   seed: s.parameters.seed != null ? String(s.parameters.seed) : '',
+  imagePrompt: s.parameters.image_prompt ?? '',
+  characterIds: s.parameters.character_ids ?? [],
+  imageApproval: s.parameters.image_approval ?? 'manual',
 })
 
 const ratio = (a: Asset | null) => (a?.width && a?.height ? a.width / a.height : null)
 
 type Props = {
+  projectId?: string
   scene: Scene
   index: number
   onDirtyChange: (dirty: boolean) => void
@@ -41,7 +50,7 @@ type Props = {
   onDeleted: () => void
 }
 
-export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDeleted }: Props) {
+export function SceneEditor({ scene, projectId, index, onDirtyChange, onDuplicated, onDeleted }: Props) {
   const qc = useQueryClient()
   const toast = useToast()
   const [draft, setDraft] = useState<Draft>(() => fromScene(scene))
@@ -51,6 +60,9 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
   const [showHistory, setShowHistory] = useState(false)
   const [startUploading, setStartUploading] = useState(false)
   const [endUploading, setEndUploading] = useState(false)
+  const [showImages, setShowImages] = useState(false)
+  const characters = useQuery({ queryKey: ['characters', projectId],
+    queryFn: ({ signal }) => api.characters(projectId!, signal), enabled: !!projectId && showImages })
   const uploading = startUploading || endUploading
 
   // Si la escena cambia desde fuera (otro guardado, MCP) y no hay cambios locales, sincroniza.
@@ -92,11 +104,14 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
       if (duration !== base.duration_seconds) payload.duration_seconds = duration
       if (draft.start?.id !== clean.start?.id) payload.start_asset_id = draft.start?.id ?? null
       if (draft.end?.id !== clean.end?.id) payload.end_asset_id = draft.end?.id ?? null
-      if (draft.seedMode !== clean.seedMode || draft.seed !== clean.seed) {
+      if (draft.seedMode !== clean.seedMode || draft.seed !== clean.seed || draft.imagePrompt !== clean.imagePrompt || draft.imageApproval !== clean.imageApproval || JSON.stringify(draft.characterIds) !== JSON.stringify(clean.characterIds)) {
         payload.parameters = {
           ...base.parameters,
           seed_mode: draft.seedMode,
           seed: draft.seedMode === 'fixed' ? Number(draft.seed) : null,
+          image_prompt: draft.imagePrompt,
+          character_ids: draft.characterIds,
+          image_approval: draft.imageApproval,
         }
       }
       return api.updateScene(scene.id, payload as { expected_revision: number })
@@ -125,6 +140,19 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
   useEffect(() => onDirtyChange(dirty || save.isPending || uploading), [dirty, save.isPending, uploading, onDirtyChange])
 
   const canSave = dirty && durationOk && seedOk && !uploading && !save.isPending && !(draft.end && !draft.start)
+  const onImageApplied = useCallback((s: Scene) => {
+    setBase(s)
+    setDraft((current) => {
+      const saved = fromScene(s)
+      const merged = { ...current }
+      for (const key of Object.keys(saved) as (keyof Draft)[]) {
+        if (JSON.stringify(current[key]) === JSON.stringify(clean[key])) Object.assign(merged, { [key]: saved[key] })
+      }
+      return merged
+    })
+    qc.setQueryData<Scene[]>(['scenes', s.chapter_id], (xs) => xs?.map((x) => x.id === s.id ? s : x))
+    qc.invalidateQueries({ queryKey: ['chapters'] })
+  }, [clean, qc])
 
   const doSave = useCallback(() => {
     if (canSave) save.mutate(draft)
@@ -183,6 +211,38 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
         {mode && <span className="chip chip-mode">{mode}</span>}
       </div>
 
+      <details className="advanced scene-preparation" onToggle={(e) => setShowImages(e.currentTarget.open)}>
+        <summary>1 · Personajes y prompt para crear la imagen</summary>
+        {showImages && <div className="adv-body">
+          <p className="hint">Marca quién aparece en esta escena. El orden indica qué personaje es la referencia 1 y cuál la 2.</p>
+          {projectId && <Link to={`/proyectos/${projectId}`}>Abrir biblioteca de personajes del proyecto</Link>}
+          {characters.isError && <p role="alert">No se pudieron cargar los personajes. <button className="btn btn-sm" onClick={() => characters.refetch()}>Reintentar</button></p>}
+          <div className="character-grid">{characters.data?.map((c) => {
+            const selected = draft.characterIds.includes(c.id)
+            const saved = base.parameters.cast?.find((r) => r.character_id === c.id)
+            return <label className={`character-card ${selected ? 'selected' : ''}`} key={c.id}>
+              <input type="checkbox" checked={selected} disabled={!selected && draft.characterIds.length >= 2}
+                onChange={() => set('characterIds', selected ? draft.characterIds.filter((id) => id !== c.id) : [...draft.characterIds, c.id])} />
+              <img src={thumbUrl(selected && saved ? saved.asset_id : c.reference_asset.id, 128)} alt={c.name} loading="lazy" />
+              <span>{selected ? `${draft.characterIds.indexOf(c.id) + 1} · ` : ''}{c.name}</span>
+            </label>
+          })}</div>
+          {base.parameters.cast?.filter((r) => !characters.data?.some((c) => c.id === r.character_id)).map((r) => <label key={r.character_id} className="hint">
+            <input type="checkbox" checked={draft.characterIds.includes(r.character_id)} onChange={() => set('characterIds', draft.characterIds.filter((id) => id !== r.character_id))} /> Referencia guardada: {r.name}
+          </label>)}
+          <p className="hint">Este flujo admite hasta dos referencias. Las selecciones guardadas conservan su imagen original aunque cambie la biblioteca.</p>
+          <div className="field"><label htmlFor="scene-image-prompt">Prompt de imagen · Qwen</label>
+            <textarea id="scene-image-prompt" className="textarea" value={draft.imagePrompt} maxLength={30000} spellCheck={false}
+              onChange={(e) => set('imagePrompt', e.target.value)} placeholder="Composición, personajes, pose, escenario y luz. En inglés." /></div>
+          <p className="hint">El guion aporta lo que sucede. Este prompt prepara el fotograma; el de animación se guarda aparte.</p>
+          <div className="field"><label htmlFor="scene-image-approval">Revisión de imágenes</label>
+            <select id="scene-image-approval" className="select" value={draft.imageApproval} onChange={(e) => set('imageApproval', e.target.value as Draft['imageApproval'])}>
+              <option value="manual">Manual · revisar antes de usar</option><option value="automatic">Automática · usar como inicio sin revisar</option>
+            </select><p className="hint">La opción automática asigna la imagen generada. No evalúa su calidad visual.</p></div>
+          <SceneImagePanel scene={base} dirty={dirty || save.isPending || uploading} onApplied={onImageApplied} />
+        </div>}
+      </details>
+
       <div className="refs">
         <ImageDrop
           id="drop-start"
@@ -220,7 +280,7 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
       )}
 
       <div className="field">
-        <label htmlFor="scene-prompt">Prompt</label>
+        <label htmlFor="scene-prompt">2 · Prompt de animación · H3</label>
         <textarea
           id="scene-prompt"
           className="textarea prompt-box"
@@ -259,7 +319,7 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
             aria-invalid={!durationOk}
             style={!durationOk ? { borderColor: 'var(--danger)' } : undefined}
           />
-          <span className="hint">{durationOk ? 'Puedes guardar 0,5–60 s; este flujo H3 genera únicamente 4–15 s.' : 'Introduce un valor entre 0,5 y 60.'}</span>
+          <span className="hint">{durationOk ? 'Puedes ajustar los segundos manualmente o pedir a ChatGPT que los estime según el prompt, el diálogo y las imágenes de inicio/final. Este flujo H3 genera 4–15 s (guardado: 0,5–60 s).' : 'Introduce un valor entre 0,5 y 60.'}</span>
         </div>
         <div className="field">
           <label htmlFor="scene-seed-mode">Semilla</label>

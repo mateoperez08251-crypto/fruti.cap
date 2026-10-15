@@ -98,6 +98,9 @@ class SceneParameters(BaseModel):
 
     seed_mode: Literal["random", "fixed"] = "random"
     seed: int | None = Field(default=None, ge=0, le=2**64 - 1)
+    character_ids: list[str] = Field(default_factory=list, max_length=2)
+    image_prompt: str = Field(default="", max_length=30000)
+    image_approval: Literal["manual", "automatic"] = "manual"
 
 
 class SceneCreate(BaseModel):

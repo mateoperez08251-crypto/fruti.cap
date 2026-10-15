@@ -2,7 +2,8 @@
 
 Leer [dirección visual](../VISUAL_DIRECTION.md),
 [compatibilidad](../MODEL_COMPATIBILITY.md) y
-[uso y ejemplos](../PROMPT_STUDIO.md).
+[uso y ejemplos](../PROMPT_STUDIO.md) y
+[escenas y duración](../GUIA_ESCENAS_Y_DURACION.md).
 
 1. Inspeccionar las referencias. Identificar postura, apoyos, manos ocupadas, profundidad, fuente de luz y emoción inicial. No inventar un nuevo encuadre en el primer fotograma.
 2. Confirmar modo por imágenes reales: una inicial = I2VA; inicial y final = FL2VA. Usar solo los dos perfiles H3 del manifiesto, sin inventar Ref2VA, referencias de voz, ControlNet o upscale 2K disponibles.

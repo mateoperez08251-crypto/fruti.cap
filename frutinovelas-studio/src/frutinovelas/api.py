@@ -33,7 +33,17 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from frutinovelas import __version__
 from frutinovelas.config import APP_NAME, get_settings
 from frutinovelas.migrate import upgrade_to_head
-from frutinovelas.routes import assets, generation, projects, prompts, scenes, system
+from frutinovelas.routes import (
+    assets,
+    characters,
+    generation,
+    images,
+    projects,
+    prompts,
+    renders,
+    scenes,
+    system,
+)
 from frutinovelas.worker import GenerationWorker
 
 log = logging.getLogger("frutinovelas.api")
@@ -120,7 +130,7 @@ def create_app() -> FastAPI:
                 return JSONResponse({"detail": "Se requiere autorización."}, status_code=401)
         return await call_next(request)
 
-    for module in (system, projects, scenes, assets, generation, prompts):
+    for module in (system, projects, scenes, assets, generation, prompts, characters, images, renders):
         app.include_router(module.router, prefix=API_PREFIX)
 
     ui = frontend_dir()

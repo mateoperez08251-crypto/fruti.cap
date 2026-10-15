@@ -17,11 +17,13 @@ QUÉ HACE CADA PARTE
 4. ComfyUI y el gateway: servidor GPU independiente, necesario para renderizar
    desde Studio. No hace falta encenderlo para leer guías o preparar prompts.
 
-El MCP publicado aquí prepara textos; no ofrece generate_image, no guarda
-escenas y no arranca renders. Si tu conexión actual anuncia generate_image,
-es otro servidor o una implementación local adicional: conserva su proceso y
-configuración hasta identificarlo. Activar ComfyUI no añade herramientas a
-este MCP de prompts. El túnel tampoco instala modelos ni cambia capacidades.
+El MCP del repositorio conserva esas cuatro herramientas y ahora añade doce para
+leer proyectos, personajes y escenas, guardar los dos prompts y generar imágenes
+Qwen bajo petición, asignar duración y ejecutar capítulos automáticos con opción
+expresa del usuario. Consulta docs/PERSONAJES_Y_ESCENAS.md. No cambia los tokens.
+Las nuevas herramientas necesitan Studio abierto y Qwen necesita su flujo activo.
+Si tu conexión actual utiliza otro servidor con herramientas adicionales, conserva
+su proceso y configuración: git pull no modifica un servidor externo.
 
 PRIMERA VEZ: REVISAR O ACTUALIZAR TU COPIA
 
@@ -139,8 +141,8 @@ tienes espacio/GPU, ejecuta en la terminal del pod:
   fruti models --qwen-t2i si --qwen-edit fp8mixed
   fruti start --qwen-t2i si --qwen-edit fp8mixed --reexportar
 
-Esto puede descargar muchos GB. Prepara los flujos Qwen del servidor; no
-implementa generate_image en el MCP de prompts de esta entrega. Una respuesta
+Esto puede descargar muchos GB. Prepara los flujos Qwen del servidor; permite usar
+request_scene_image en el MCP actualizado cuando Studio esté abierto. Una respuesta
 available:false de otro MCP debe revisarse con el diagnóstico de ese servidor.
 ComfyUI apagado, perfiles desactivados y flujos ausentes son causas diferentes.
 

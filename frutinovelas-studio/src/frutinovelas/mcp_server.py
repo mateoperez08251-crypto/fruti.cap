@@ -1,4 +1,4 @@
-"""MCP local de preparación de prompts. No accede a escenas ni ejecuta generaciones."""
+"""MCP local: guías, prompts y preparación de imágenes mediante la API de Studio."""
 
 import argparse
 import ipaddress
@@ -8,6 +8,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 
 from frutinovelas.guidance import Preset, Task, get_guidance, guidance_catalog, read_guide
+from frutinovelas.mcp_studio import register_studio_tools
 from frutinovelas.prompts import H3Draft, ImageDraft, LintRequest, compile_h3, compile_image, lint_h3
 
 
@@ -19,7 +20,10 @@ def create_server() -> MCPServer:
             "con task y preset antes de redactar. Usa preset frutinovelas para las preferencias del proyecto "
             "o general para otros sujetos y estilos. No cargar example-story salvo que se retome ese arco. "
             "Las guías son consultables; no entrenan al modelo ni crean memoria automática. "
-            "No genera imágenes/videos ni guarda escenas. Conserva diálogos literales y verifica las imágenes."
+            "Las herramientas Studio necesitan la API local abierta. Guion, prompt de imagen y prompt H3 son distintos. "
+            "Inspecciona las referencias e imágenes antes de redactar. Encola Qwen solo si el usuario pidió generar. "
+            "La revisión manual es predeterminada; solo usa aprobación y animación automáticas si el usuario lo pidió. Inspecciona inicio y final y estima y guarda los segundos para las acciones y el diálogo (4–15 s); conserva el ajuste manual. "
+            "Conserva diálogos y prompts literales."
         ),
     )
     annotations = ToolAnnotations(
@@ -70,6 +74,7 @@ def create_server() -> MCPServer:
         """Revisión textual orientativa; no reemplaza inspección de imágenes o video."""
         return {"issues": [issue.model_dump() for issue in lint_h3(draft)]}
 
+    register_studio_tools(server)
     return server
 
 
@@ -81,7 +86,9 @@ def _loopback_host(value: str) -> str:
             return value
     except ValueError:
         pass
-    raise argparse.ArgumentTypeError("Usa una dirección loopback, por ejemplo 127.0.0.1; conecta mediante un túnel privado.")
+    raise argparse.ArgumentTypeError(
+        "Usa una dirección loopback, por ejemplo 127.0.0.1; conecta mediante un túnel privado."
+    )
 
 
 def _port(value: str) -> int:
@@ -102,7 +109,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     options = {}
     if args.transport == "streamable-http":
-        options = {"host": args.host, "port": args.port, "streamable_http_path": "/mcp", "stateless_http": True}
+        options = {
+            "host": args.host,
+            "port": args.port,
+            "streamable_http_path": "/mcp",
+            "stateless_http": True,
+        }
     create_server().run(transport=args.transport, **options)
     return 0
 

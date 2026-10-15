@@ -15,6 +15,7 @@ def test_task_guidance_keeps_story_separate(task, preset):
     assert "example-story" not in names
     assert ("preferences" in names) == (preset == "frutinovelas")
     assert all(guide["content"] for guide in context["guides"])
+    assert ("scene-timing" in names) == (task in ("story", "animation", "review"))
     assert "no entrenan" in context["persistence"]
 
 

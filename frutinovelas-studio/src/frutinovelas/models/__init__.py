@@ -121,6 +121,21 @@ class Scene(TimestampMixin, Base):
         return self.revisions[-1] if self.revisions else None
 
 
+class Character(TimestampMixin, Base):
+    __tablename__ = "characters"
+    __table_args__ = (UniqueConstraint("project_id", "name", name="uq_character_project_name"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text, default="")
+    reference_asset_id: Mapped[str] = mapped_column(ForeignKey("assets.id"))
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    __mapper_args__ = {"version_id_col": revision, "version_id_generator": False}
+    reference_asset: Mapped[Asset] = relationship()
+
+
 class SceneRevision(Base):
     __tablename__ = "scene_revisions"
     __table_args__ = (UniqueConstraint("scene_id", "number", name="uq_scene_revision_number"),)
@@ -170,6 +185,8 @@ class GenerationJob(TimestampMixin, Base):
     # NULL for finished jobs, unique scene ID for active ones: prevents double clicks.
     active_scene_id: Mapped[str | None] = mapped_column(String(36), nullable=True, unique=True)
     state: Mapped[str] = mapped_column(String(24), default="queued", index=True)
+    kind: Mapped[str] = mapped_column(String(16), default="video", server_default="video")
+    result_asset_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     prompt_id: Mapped[str] = mapped_column(String(64))
     snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
     encrypted_token: Mapped[str] = mapped_column(Text)
@@ -177,3 +194,14 @@ class GenerationJob(TimestampMixin, Base):
     result_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     result_mime: Mapped[str | None] = mapped_column(String(64), nullable=True)
     result_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class ChapterRender(TimestampMixin, Base):
+    __tablename__ = "chapter_renders"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    chapter_id: Mapped[str] = mapped_column(ForeignKey("chapters.id", ondelete="CASCADE"), index=True)
+    active_chapter_id: Mapped[str | None] = mapped_column(String(36), nullable=True, unique=True)
+    state: Mapped[str] = mapped_column(String(24), default="queued")
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
+    error: Mapped[str] = mapped_column(Text, default="")
+    result_path: Mapped[str | None] = mapped_column(String(500), nullable=True)

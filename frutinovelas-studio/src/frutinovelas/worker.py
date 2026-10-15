@@ -15,9 +15,10 @@ from sqlalchemy import select
 from frutinovelas.config import get_settings
 from frutinovelas.db import session_factory
 from frutinovelas.models import Asset, GenerationJob
-from frutinovelas.services.assets import asset_path
+from frutinovelas.services.assets import AssetError, asset_path, store_image
 from frutinovelas.services.comfy import ComfyClient, ComfyError, cipher, identity_key, prepare_graph
 from frutinovelas.services.generation import ACTIVE, transition
+from frutinovelas.services.image_generation import finish_automatic_image, graph_contract, prepare_image_graph
 
 log = logging.getLogger(__name__)
 
@@ -112,8 +113,27 @@ class GenerationWorker:
                     transition(self.factory, job.id, state, message, expected_states=(job.state,))
 
     def tick(self):
+        self.current_id = None
         if not self.lock.acquire():
             return
+        with self.factory() as session:
+            automatic_id = session.scalar(
+                select(GenerationJob.id)
+                .where(
+                    GenerationJob.kind == "image",
+                    GenerationJob.state == "completed",
+                    GenerationJob.snapshot["auto_finish_done"].as_boolean().is_(False),
+                )
+                .limit(1)
+            )
+        if automatic_id:
+            finish_automatic_image(self.factory, automatic_id)
+        self._tick_job()
+        from frutinovelas.services.chapter_render import advance_runs
+
+        advance_runs(self.factory, self.stop_event, self.client_factory)
+
+    def _tick_job(self):
         self.current_id = None
         with self.factory() as s:
             job = s.scalar(
@@ -141,10 +161,14 @@ class GenerationWorker:
                 if not transition(self.factory, job.id, "uploading"):
                     return
                 names = {}
-                for role in ("start", "end"):
+                references = (
+                    {str(i): c["asset_id"] for i, c in enumerate(p.get("cast", []))}
+                    if job.kind == "image"
+                    else {role: p.get(role + "_asset_id") for role in ("start", "end")}
+                )
+                for role, asset_id in references.items():
                     if self.stop_event.is_set():
                         return
-                    asset_id = p.get(role + "_asset_id")
                     if not asset_id:
                         continue
                     with self.factory() as s:
@@ -156,18 +180,29 @@ class GenerationWorker:
                     try:
                         with Image.open(original) as im:
                             oriented = ImageOps.exif_transpose(im)
-                            ImageOps.fit(oriented.convert("RGB"), (576, 1024)).save(prepared)
+                            if job.kind == "image":
+                                reference = oriented.convert("RGB")
+                                reference.thumbnail((1024, 1024))
+                                reference.save(prepared)
+                            else:
+                                ImageOps.fit(oriented.convert("RGB"), (576, 1024)).save(prepared)
                         names[role] = client.upload(prepared)
                     finally:
                         prepared.unlink(missing_ok=True)
-                graph = prepare_graph(
-                    p["graph"],
-                    p["prompt"],
-                    p["duration"],
-                    p["seed"],
-                    names["start"],
-                    names.get("end"),
-                    job.id,
+                graph = (
+                    prepare_image_graph(
+                        p["graph"], p["prompt"], p.get("cast", []), p["seed"], list(names.values()), job.id
+                    )
+                    if job.kind == "image"
+                    else prepare_graph(
+                        p["graph"],
+                        p["prompt"],
+                        p["duration"],
+                        p["seed"],
+                        names["start"],
+                        names.get("end"),
+                        job.id,
+                    )
                 )
                 if self.stop_event.is_set() or not transition(self.factory, job.id, "submitting"):
                     return
@@ -231,6 +266,9 @@ class GenerationWorker:
                 return
             if not status.get("completed"):
                 return
+            if job.kind == "image":
+                self.download_image(client, job, history)
+                return
             candidates = []
             output = history.get("outputs", {}).get("20", {})
             for key in ("images", "videos", "gifs"):
@@ -284,6 +322,55 @@ class GenerationWorker:
             )
         finally:
             client.close()
+
+    def download_image(self, client, job, history):
+        output, _, _ = graph_contract(job.snapshot["graph"], bool(job.snapshot.get("cast")))
+        candidates = history.get("outputs", {}).get(output, {}).get("images", [])
+        result = next(
+            (
+                x
+                for x in candidates
+                if Path(x.get("filename", "")).suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")
+            ),
+            None,
+        )
+        if not result:
+            transition(self.factory, job.id, "failed", "Qwen terminó sin una imagen compatible en SaveImage.")
+            return
+        if not transition(self.factory, job.id, "downloading"):
+            return
+        tmp = self.settings.tmp_dir / (job.id + "-qwen.part")
+        try:
+            size = 0
+            with client.client.stream(
+                "GET", "view", params={k: result[k] for k in ("filename", "subfolder", "type") if k in result}
+            ) as response:
+                if response.status_code != 200:
+                    raise ComfyError("No se pudo recuperar la imagen de Qwen; se reintentará la descarga.")
+                with tmp.open("wb") as stream:
+                    for chunk in response.iter_bytes():
+                        if self.stop_event.is_set():
+                            return
+                        size += len(chunk)
+                        if size > self.settings.max_upload_mb * 1024**2:
+                            raise AssetError("La imagen de Qwen supera el límite de almacenamiento.")
+                        stream.write(chunk)
+            with self.factory() as session, tmp.open("rb") as stream:
+                asset = store_image(session, self.settings, stream, "Qwen-" + job.id + ".png")
+                session.commit()
+                transition(
+                    self.factory,
+                    job.id,
+                    "completed",
+                    result_asset_id=asset.id,
+                    result_path=asset.rel_path,
+                    result_mime=asset.mime,
+                    result_sha256=asset.sha256,
+                )
+        except AssetError as exc:
+            transition(self.factory, job.id, "failed", str(exc))
+        finally:
+            tmp.unlink(missing_ok=True)
 
 
 def main():

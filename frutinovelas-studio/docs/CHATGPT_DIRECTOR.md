@@ -47,3 +47,20 @@ Conservar versiones y distinguir propuesta de
 una decisión aprobada. Estos documentos no conectan por sí solos herramientas ni modelos.
 Con el MCP conectado, pedir primero `get_directing_guidance`; el servidor ofrece también
 recursos `frutinovelas://guides` y el prompt `direct_scene`. No promete memoria entre chats.
+
+## Preparación de escenas con personajes
+
+Consultar [PERSONAJES_Y_ESCENAS.md](PERSONAJES_Y_ESCENAS.md). Leer IDs reales, guion,
+continuidad y referencias. El prompt de imagen vive en `parameters.image_prompt`; el
+prompt H3 es `scene.prompt`. Guardarlos con `save_scene_preparation`, sin mezclarlos.
+Leer [la guía de escenas y duración](GUIA_ESCENAS_Y_DURACION.md): estimar segundos
+según prompt, diálogo, cámara y fotogramas reales de inicio/final; guardarlos con
+`duration_seconds` en `save_scene_preparation`. Dos imágenes delimitan la misma
+escena. Mantener el ajuste manual y no sustituir sus extremos ni diálogos.
+Usar `request_scene_image` solo si se pidió generar. En manual esperar aprobación
+antes de `approve_scene_image`; inspeccionar el resultado antes de redactar H3.
+Activar `image_approval=automatic` solo a petición del usuario. Para generar un
+capítulo completo, preparar y guardar ambos prompts y duraciones primero; después
+`request_chapter_render` requiere aprobación automática expresa para ese proceso.
+La cola no consulta a ChatGPT para reescribir prompts o recalcular tiempos durante
+la inferencia. Unir clips no garantiza continuidad visual ni sonora perfecta.

@@ -250,13 +250,23 @@ async def test_mcp_tools_are_read_only_and_call_the_compiler():
 
     server = create_server()
     tools = await server.list_tools()
-    assert {t.name for t in tools} == {
+    preparation_tools = {
         "get_directing_guidance",
         "prepare_h3_prompt",
         "prepare_image_prompt",
         "review_h3_prompt",
     }
-    assert all(t.annotations.read_only_hint and not t.annotations.open_world_hint for t in tools)
+    assert preparation_tools <= {t.name for t in tools}
+    assert all(
+        t.annotations.read_only_hint and not t.annotations.open_world_hint
+        for t in tools
+        if t.name in preparation_tools
+    )
+    assert all(
+        not t.annotations.read_only_hint
+        for t in tools
+        if t.name in {"save_scene_preparation", "request_scene_image", "approve_scene_image"}
+    )
     result = await server.call_tool("prepare_h3_prompt", {"draft": example()})
     assert not result.is_error
     assert "Darío, vamos tarde. Apresúrate." in str(result)

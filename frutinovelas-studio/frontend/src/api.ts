@@ -54,10 +54,21 @@ export type PromptCheckInput = {
 }
 
 export type SceneParameters = {
+  image_approval?: 'manual' | 'automatic'
+  image_prompt?: string
+  character_ids?: string[]
+  cast?: CharacterReference[]
   seed_mode?: 'random' | 'fixed'
   seed?: number | null
   [k: string]: unknown
 }
+
+export type CharacterReference = { character_id: string; name: string; description: string; asset_id: string; sha256: string }
+export type Character = { id: string; project_id: string; name: string; description: string; revision: number; archived: boolean; reference_asset: Asset }
+export type CharacterInput = { name: string; description: string; reference_asset_id: string }
+export type ChapterRender = { id: string; chapter_id: string; state: string; error: string; scenes: { scene_id: string; title: string }[]; result_url: string | null }
+export type ImageGeneration = { id: string; scene_id: string; kind: 'image'; auto_finish_done?: boolean; approval_mode?: 'manual' | 'automatic'; state: Generation['state']; error: string;
+  revision_number: number; seed: number; references: CharacterReference[]; result_asset_id: string | null; result_url: string | null; created_at: string }
 
 export type Scene = {
   id: string
@@ -159,6 +170,14 @@ const json = (method: string, data: unknown): RequestInit => ({
 })
 
 export const api = {
+  chapterRenders: (id: string, signal?: AbortSignal) => request<ChapterRender[]>(`/chapters/${id}/renders`, { signal }),
+  renderChapter: (id: string, revision: number, scenes: Record<string, number>, requestId: string) => request<ChapterRender>(`/chapters/${id}/render`, json('POST', { expected_revision: revision, scene_revisions: scenes, request_id: requestId, automatic_approval: true })),
+  characters: (projectId: string, signal?: AbortSignal) => request<Character[]>(`/projects/${projectId}/characters`, { signal }),
+  createCharacter: (projectId: string, data: CharacterInput) => request<Character>(`/projects/${projectId}/characters`, json('POST', data)),
+  updateCharacter: (id: string, data: CharacterInput & { expected_revision: number; archived?: boolean }) => request<Character>(`/characters/${id}`, json('PUT', data)),
+  imageGenerations: (sceneId: string, signal?: AbortSignal) => request<ImageGeneration[]>(`/scenes/${sceneId}/image-generations`, { signal }),
+  generateSceneImage: (sceneId: string, revision: number, requestId: string, autoAnimate = false) => request<ImageGeneration>(`/scenes/${sceneId}/generate-image`, json('POST', { expected_revision: revision, request_id: requestId, auto_animate: autoAnimate })),
+  approveSceneImage: (jobId: string, revision: number, role: 'start' | 'end') => request<Scene>(`/image-generations/${jobId}/approve`, json('POST', { expected_revision: revision, role })),
   checkPrompt: (data: PromptCheckInput) => request<PromptIssue[]>('/prompts/lint', json('POST', data)),
   status: (signal?: AbortSignal) => request<SystemStatus>('/system/status', { signal }),
   comfyConnection: () => request<ComfyConnection>('/comfy/connection'),

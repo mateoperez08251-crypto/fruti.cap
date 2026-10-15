@@ -8,8 +8,8 @@ No se han descargado pesos ni ejecutado GPU en esta entrega.
 |---|---|---|---|
 | `h3_balanced_default` | H3 FL2VA INT8, encoder NVFP4 AWQ, video VAE INT8, audio FP32 | I2VA o FL2VA | App individual y kit remoto |
 | `h3_quality_bf16_optional` | H3 FL2VA BF16, encoder BF16, video VAE FP16, audio FP32 | Misma estructura I2VA/FL2VA | Perfil opcional del kit; requiere recursos y conexión compatibles |
-| `qwen2512_t2i` | Qwen-Image-2512 FP8 + LoRA Lightning declarada | Descripción de un fotograma | Kit ComfyUI; generación Qwen no integrada en la interfaz del estudio |
-| `qwen_edit2511_fp8mixed` | Qwen-Image-Edit-2511 FP8 mixed + Lightning | Cambios concretos y atributos a preservar | Kit ComfyUI, con referencia real |
+| `qwen2512_t2i` | Qwen-Image-2512 FP8 + LoRA Lightning declarada | Descripción de un fotograma | Kit y app: generación de imágenes desde texto, con flujo publicado y hash verificado |
+| `qwen_edit2511_fp8mixed` | Qwen-Image-Edit-2511 FP8 mixed + Lightning | Cambios concretos y atributos a preservar | Kit y app: una o dos referencias de personajes reales |
 | `qwen_edit2511_bf16` | Difusión Qwen Edit BF16; conserva encoder FP8 | Mismo prompt de edición | Perfil opcional del kit, no significa que todo el pipeline sea BF16 |
 
 Seleccionar un perfil en un borrador de prompt **no cambia los modelos del servidor**.
@@ -62,3 +62,5 @@ sin revisar qué rama está activa. Mantener el workflow exportado y validado.
 INT8, FP8 y BF16 describen precisión, no una garantía de identidad o calidad.
 
 Fuentes oficiales y alcance de la investigación: [PROMPT_RESEARCH.md](PROMPT_RESEARCH.md).
+
+La integración Qwen de personajes compone un latent vacío 576×1024 y conecta las referencias reales sin recortarlas. Se conservan los demás parámetros del flujo exportado; ver [contrato y validación](PERSONAJES_Y_ESCENAS.md).

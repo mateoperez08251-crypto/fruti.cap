@@ -99,7 +99,7 @@ py -3 -m uv run frutinovelas-mcp
 ```
 
 Usa el SDK **MCP 2.x** del proyecto, `MCPServer` y transporte **stdio** por defecto, para clientes que
-lanzan procesos locales. También admite **Streamable HTTP** local para túneles privados. Expone cuatro herramientas:
+lanzan procesos locales. También admite **Streamable HTTP** local para túneles privados. Conserva estas cuatro herramientas:
 
 | Herramienta | Uso |
 |---|---|
@@ -149,8 +149,12 @@ El endpoint es `/mcp`. El servidor solo acepta bind en loopback y mantiene las c
 de Host/Origin del SDK. Usa sesiones HTTP sin estado; cada llamada vuelve a leer las guías.
 La conexión con ChatGPT requiere configurar el túnel y el plugin conforme a
 [la guía de CMD](CONEXION_MCP_Y_TUNNEL.txt). Cambiar `--port` si ya existe otro MCP en 8766.
-No requiere ComfyUI. Tampoco expone lectura/escritura de escenas, render, generación Qwen o
-montaje mediante MCP. Una conexión MCP correcta no verifica el estado del servidor de inferencia.
+Las guías y el compilador no requieren ComfyUI. Las nuevas herramientas Studio permiten
+leer escenas, biblioteca y guion, guardar ambos prompts y encolar Qwen con referencias.
+Necesitan la API local abierta; Qwen necesita su flujo activo en RunPod. Ver
+[Personajes y escenas](PERSONAJES_Y_ESCENAS.md). Una conexión MCP correcta no verifica
+el estado del servidor de inferencia. El montaje automático es opcional y usa
+los prompts y duraciones ya guardados. Ver [guía de escenas y duración](GUIA_ESCENAS_Y_DURACION.md).
 
 Los documentos se incluyen en el paquete Python: las guías siguen disponibles en una instalación
 de la wheel sin depender de una carpeta `.agents` externa.

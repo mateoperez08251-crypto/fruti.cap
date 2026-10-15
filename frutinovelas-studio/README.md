@@ -51,9 +51,15 @@ La cola y los resultados se guardan en el directorio de datos del usuario, fuera
 repositorio. El token se cifra con una clave local (`comfy_credentials.key`); incluye
 todo ese directorio si haces una copia de seguridad. No subas la clave ni los datos a Git.
 
-Esta entrega añade generación individual de video desde imágenes ya elegidas. La
-generación de imágenes con Qwen, el control de escenas mediante MCP y el montaje automático de capítulos siguen siendo
-integraciones separadas. Los scripts de RunPod y sus modelos se conservan.
+La biblioteca de personajes, el selector por escena y la generación de imágenes Qwen
+con referencias ya están integrados. Cada escena guarda por separado el prompt de
+imagen y el de animación. La aprobación es manual de forma predeterminada; puedes
+activar el modo automático por escena o para un capítulo completo.
+Consulta [Personajes y escenas](docs/PERSONAJES_Y_ESCENAS.md) para interfaz, cola,
+MCP, límites y alcance probado. El capítulo automático ejecuta los prompts guardados
+en serie y une los clips con FFmpeg; no evalúa su calidad. ChatGPT puede estimar y
+guardar los segundos según el prompt y las imágenes de inicio/final; el editor
+conserva el ajuste manual. Ver [guía de escenas y duración](docs/GUIA_ESCENAS_Y_DURACION.md).
 
 Los listados leen solo la revisión actual de cada escena; el historial completo se
 consulta al abrirlo. El progreso lee resúmenes sin cargar los flujos guardados.
@@ -95,10 +101,10 @@ py -3 -m uv run frutinovelas-prompts h3 examples/prompts/bruno_horn_i2va.json
 py -3 -m uv run frutinovelas-prompts image examples/prompts/qwen_edit_cocardo.json
 ```
 
-El comando `frutinovelas-mcp` sirve cuatro herramientas **por stdio o HTTP local**, recursos y el prompt
+El comando `frutinovelas-mcp` sirve cuatro herramientas de guías y doce de preparación y ejecución de escenas **por stdio o HTTP local**, recursos y el prompt
 `direct_scene`. `get_directing_guidance` permite al asistente leer las skills y preferencias antes
 de redactar; las otras tres herramientas preparan y revisan prompts. No conecta automáticamente
-ChatGPT web: la conexión requiere configurar su túnel. No modifica escenas ni genera video. Las guías no entrenan al modelo ni crean
+ChatGPT web: la conexión requiere configurar su túnel. Las herramientas Studio leen y guardan ambos prompts y pueden encolar Qwen bajo petición. La animación y el montaje automáticos requieren activar esa opción expresamente. Las guías no entrenan al modelo ni crean
 memoria automática entre chats.
 
 ```cmd
@@ -106,6 +112,6 @@ py -3.12 -m uv run --frozen frutinovelas-mcp --transport streamable-http --host 
 ```
 
 El endpoint es `http://127.0.0.1:8766/mcp`. Funciona aunque ComfyUI esté apagado;
-preparar prompts y ejecutar una generación son capacidades distintas.
+preparar prompts y ejecutar una generación son capacidades distintas. Las herramientas Studio requieren la API local abierta; generar requiere también Qwen activo en ComfyUI.
 Ver [uso completo](docs/PROMPT_STUDIO.md), [instrucciones para ChatGPT](docs/CHATGPT_DIRECTOR.md),
 [compatibilidad](docs/MODEL_COMPATIBILITY.md) y [fuentes consultadas](docs/PROMPT_RESEARCH.md).

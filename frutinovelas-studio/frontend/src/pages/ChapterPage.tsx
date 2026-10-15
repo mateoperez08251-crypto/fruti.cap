@@ -3,6 +3,7 @@ import { BookText, ChevronRight, Clapperboard, ListOrdered, Loader2, Pencil, Plu
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useBlocker, useSearchParams } from 'react-router-dom'
 import { api, ApiError, type Chapter, type Scene } from '../api'
+import { ChapterAutoRender } from '../components/ChapterAutoRender'
 import { PromptDialog } from '../components/Dialogs'
 import { SceneEditor } from '../components/SceneEditor'
 import { SceneList } from '../components/SceneList'
@@ -90,6 +91,7 @@ export function ChapterPage({ chapterId }: { chapterId: string }) {
   const [tab, setTab] = useState<Tab>('escenas')
   const [renaming, setRenaming] = useState(false)
   const dirtyRef = useRef(false)
+  const [editingDirty, setEditingDirty] = useState(false)
   const [pinnedId, setPinnedId] = useState<string | null>(null)
   const blocker = useBlocker(({ currentLocation, nextLocation }) =>
     (currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search) && dirtyRef.current)
@@ -105,6 +107,7 @@ export function ChapterPage({ chapterId }: { chapterId: string }) {
     if (next === tab) return
     if (dirtyRef.current && !window.confirm('Hay cambios sin guardar o una operación en curso. ¿Cambiar de pestaña y descartar el borrador?')) return
     dirtyRef.current = false
+    setEditingDirty(false)
     setTab(next)
   }
 
@@ -126,6 +129,7 @@ export function ChapterPage({ chapterId }: { chapterId: string }) {
       if (id === selectedId) return
       if (!force && dirtyRef.current && !window.confirm('Hay cambios sin guardar en esta escena. ¿Descartarlos?')) return
       dirtyRef.current = false
+      setEditingDirty(false)
       setPinnedId(id)
       setParams(id ? { escena: id } : {}, { replace: true })
     },
@@ -186,6 +190,7 @@ export function ChapterPage({ chapterId }: { chapterId: string }) {
 
   const onDirtyChange = useCallback((d: boolean) => {
     dirtyRef.current = d
+    setEditingDirty(d)
   }, [])
 
   if (chapter.isError) {
@@ -260,6 +265,8 @@ export function ChapterPage({ chapterId }: { chapterId: string }) {
         />
       )}
 
+      {c && scenes.data && <ChapterAutoRender chapter={c} scenes={list} dirty={editingDirty} />}
+
       {tab === 'escenas' && (
         <>
           {scenes.isError && <p className="notice warn" role="alert">No se pudieron cargar las escenas. <button className="btn btn-sm" onClick={() => scenes.refetch()}>Reintentar</button></p>}
@@ -295,6 +302,7 @@ export function ChapterPage({ chapterId }: { chapterId: string }) {
                 <SceneEditor
                   key={selected.id}
                   scene={selected}
+                  projectId={c?.project_id}
                   index={selectedIndex}
                   onDirtyChange={onDirtyChange}
                   onDuplicated={(s) => select(s.id, true)}
