@@ -1,64 +1,125 @@
-# FRUTINOVELAS en RunPod
+# FRUTINOVELAS en RunPod (por comandos)
 
-Alternativa a Colab: un pod de RunPod con GPU ejecuta ComfyUI y el programa del PC se conecta
-a él por el **proxy HTTPS de RunPod** a través del gateway con token. No hace falta Cloudflare.
+En RunPod todo se hace desde la **terminal del pod** (web terminal o SSH) con la herramienta `fruti`.
+El programa del PC se conecta por el **proxy HTTPS de RunPod** al gateway con token.
 
 ```
 PC: FRUTINOVELAS Studio ──HTTPS + token──▶ https://<POD_ID>-8189.proxy.runpod.net ──▶ gateway :8189 ──▶ ComfyUI 127.0.0.1:8188
 ```
 
-Libreta: `notebooks/FRUTINOVELAS_ComfyUI_Imagenes_H3_RunPod.ipynb`. Tiene la misma lógica que la de Colab,
-generada desde la misma fuente (`scripts/build_colab_notebook.py`).
+## 0. En tu PC: preparar el kit
 
-## 1. Secretos en RunPod (opcional pero recomendado)
+```powershell
+cd D:\fruti.cap\frutinovelas-studio
+uv run python scripts/build_remote_kit.py
+```
 
-En la consola de RunPod → **Secrets** crea:
+Genera `dist\frutinovelas-kit.tar.gz` (≈60 KB): scripts, manifiesto de modelos, perfiles y tu flujo H3 sin cambios.
+No lleva secretos ni modelos.
+
+## 1. Secretos en RunPod (recomendado)
+
+Consola de RunPod → **Secrets**:
 
 | Secreto | Valor |
 |---|---|
 | `hf_token` | Token de lectura de Hugging Face |
-| `fruti_gateway_token` | Token largo y aleatorio (≥ 32 caracteres) para el gateway |
+| `fruti_gateway_token` | Token aleatorio de 32 caracteres o más |
 
-Para generar un token en PowerShell:
+Generar un token en PowerShell:
 
 ```powershell
 -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 40 | ForEach-Object {[char]$_})
 ```
 
-Si no defines `fruti_gateway_token`, la libreta genera uno y lo guarda en `/workspace/FRUTINOVELAS/secrets/`.
+Si no lo defines, `fruti` genera uno y lo guarda en `/workspace/FRUTINOVELAS_data/secrets/`.
 
 ## 2. Crear el pod
 
 | Ajuste | Valor |
 |---|---|
-| Plantilla | Oficial **Runpod PyTorch** reciente (CUDA 12.8 o superior), con JupyterLab |
+| Plantilla | Oficial **Runpod PyTorch** reciente (CUDA 12.8 o superior) |
 | GPU | Recomendado ≥ 80 GB de VRAM (H100, H200, A100 80 GB, RTX PRO 6000). Requisito real no verificado |
 | Disco del contenedor | ≥ 40 GB |
 | Disco de volumen (`/workspace`) | ≥ 80 GB solo H3 · ≥ 150 GB con Qwen · ≥ 200 GB con perfil BF16 |
-| Expose HTTP Ports | `8888,8189` |
-| Expose TCP Ports | ninguno necesario (22 si quieres SSH) |
+| Expose HTTP Ports | **`8189`** (añade `8888` solo si también quieres Jupyter) |
+| Expose TCP Ports | `22` si vas a entrar por SSH |
 | Variables de entorno | `HF_TOKEN` = `{{ RUNPOD_SECRET_hf_token }}` |
 | | `FRUTI_GATEWAY_TOKEN` = `{{ RUNPOD_SECRET_fruti_gateway_token }}` |
 
 > [!CAUTION]
-> **No expongas el puerto 8188.** ComfyUI no tiene autenticación; la libreta lo deja en `127.0.0.1`
-> y solo publica el gateway (8189), que exige token. Evita las plantillas de ComfyUI ya hechas que exponen 8188.
+> **No expongas el puerto 8188.** ComfyUI no tiene contraseña: `fruti` lo deja en `127.0.0.1` y solo publica el
+> gateway (8189), que exige token. `fruti start` comprueba desde Internet que sin token responde 401.
 
-Si usas un **volumen de red**, los modelos (≈40 GB) se conservan aunque borres el pod, y puedes usarlos en pods nuevos
-del mismo centro de datos.
+## 3. Subir el kit al pod
 
-## 3. Ejecutar la libreta
+**Opción A · `runpodctl` (viene instalado en el pod):**
 
-1. En el pod: **Connect → Jupyter Lab** (puerto 8888).
-2. Arrastra `FRUTINOVELAS_ComfyUI_Imagenes_H3_RunPod.ipynb` al explorador de archivos, dentro de `/workspace`.
-3. Ábrela y ejecuta las celdas en orden (o *Run → Run All Cells*: las pruebas y la parada vienen desactivadas).
-   - Para cambiar el perfil o el modo de acceso, edita las primeras líneas de la celda 1.
-4. Celda 8: debe terminar con «Acceso público verificado (sin token → 401, con token → 200)».
-5. Celda 9: copia la URL `https://<POD_ID>-8189.proxy.runpod.net`.
-6. Celda 9B: pon `MOSTRAR_TOKEN = True`, copia el token y borra la salida.
-7. Celda 10: pon `PROBAR_H3_SOLO_INICIO = True` para la primera prueba real (5 s).
+```powershell
+# PC (descarga runpodctl para Windows desde https://github.com/runpod/runpodctl/releases)
+runpodctl send dist\frutinovelas-kit.tar.gz
+# → muestra un código, p. ej. 8338-galileo-collect-fidel
+```
 
-## 4. Conectar desde el PC
+```bash
+# Pod
+cd /workspace
+runpodctl receive 8338-galileo-collect-fidel
+```
+
+**Opción B · `scp`** (con TCP 22 expuesto y tu clave SSH en RunPod):
+
+```powershell
+scp -P <PUERTO> dist\frutinovelas-kit.tar.gz root@<IP>:/workspace/
+```
+
+**Opción C · `git clone`** si publicas el repositorio: `fruti_remote.py` funciona igual desde `frutinovelas-studio/`.
+
+## 4. Instalar y arrancar (una sola orden)
+
+```bash
+cd /workspace
+tar -xzf frutinovelas-kit.tar.gz
+python3 frutinovelas-kit/scripts/fruti_remote.py setup
+```
+
+`setup` hace, en orden:
+1. `doctor`: GPU, VRAM, RAM, disco.
+2. `install`: ComfyUI fijado al commit `3541246`, dependencias, Chromium para la exportación y FFmpeg.
+3. `models`: descarga ≈40 GB con revisiones fijadas y verifica tamaño y SHA-256.
+4. `start`: arranca ComfyUI, **exporta tus flujos a API** (inicio+final y solo inicio), los valida contra el
+   servidor real, levanta el gateway y comprueba el acceso público.
+
+Al final imprime la URL y el comando para el PC. Opciones útiles:
+
+```bash
+fruti setup --qwen-t2i si              # añade Qwen-Image-2512 (texto a imagen)
+fruti setup --qwen-edit fp8mixed       # añade Qwen-Image-Edit-2511
+fruti setup --perfil h3_quality_bf16_optional
+fruti setup --acceso quick             # Cloudflare Quick Tunnel en vez del proxy de RunPod
+fruti setup --sin-sha256               # solo tamaños (más rápido, menos seguro)
+```
+
+Las opciones se guardan: los siguientes `fruti start` las reutilizan.
+
+## 5. Órdenes del día a día
+
+| Orden | Qué hace |
+|---|---|
+| `fruti status` | Procesos, URL pública, cola, uso de GPU y resultado de las pruebas |
+| `fruti token --mostrar` | Muestra el token para pegarlo en el programa |
+| `fruti token --regenerar` | Crea un token nuevo (después: `fruti start`) |
+| `fruti test --modo i2va --segundos 5` | Prueba real H3 solo-inicio |
+| `fruti test --modo ambos` | Prueba solo-inicio e inicio+final |
+| `fruti test --modo ninguno --qwen` | Prueba Qwen-Image-2512 |
+| `fruti logs comfyui -f` | Log en directo (`gateway`, `cloudflared` también) |
+| `fruti start --reexportar` | Repite la exportación API |
+| `fruti stop` | Detiene ComfyUI, gateway y túnel |
+| `fruti doctor` | Diagnóstico |
+
+Los servicios siguen funcionando aunque cierres la terminal o la sesión SSH.
+
+## 6. Conectar desde el PC
 
 ```powershell
 $env:FRUTI_COMFY_TOKEN = "PEGA_AQUI_EL_TOKEN"
@@ -66,37 +127,35 @@ uv run python scripts/check_colab_connection.py --url https://IDDELPOD-8189.prox
 Remove-Item Env:FRUTI_COMFY_TOKEN
 ```
 
-El script funciona igual para Colab y RunPod. Después, en el programa: *Conexiones → ComfyUI* → URL + token →
-**Probar conexión** → **Importar flujo**.
+Comprueba la conexión, que se rechaza sin token, la GPU, y descarga los flujos API verificando su SHA-256.
+Después, en el programa: *Conexiones → ComfyUI* → URL + token → **Probar conexión** → **Importar flujo**.
 
-## 5. Detener, reanudar y costes
+Para traer al PC un vídeo de prueba: en el pod `runpodctl send /workspace/FRUTINOVELAS_data/tests/<archivo>.mp4`
+y en el PC `runpodctl receive <código>`.
 
-| Acción | Qué se conserva | Qué hacer al volver |
+## 7. Detener, reanudar y costes
+
+| Acción | Qué se conserva | Al volver |
 |---|---|---|
-| Detener el pod (*Stop*) | Todo `/workspace`: modelos, ComfyUI, token, flujos | Ejecutar celdas 1–9; los paquetes pip se reinstalan solos |
-| Borrar el pod (*Terminate*) | Nada, salvo que uses volumen de red | Crear pod nuevo y repetir todo; con volumen de red los modelos ya están |
+| *Stop* del pod | Todo `/workspace`: modelos, ComfyUI, token, flujos, configuración | `python3 /workspace/frutinovelas-kit/scripts/fruti_remote.py start` (reinstala pip si hace falta y recrea el atajo `fruti`) |
+| *Terminate* | Nada, salvo que uses volumen de red | Crear pod nuevo y repetir el paso 4 |
 
 - Un pod detenido no cobra GPU, pero **el disco de volumen sigue cobrando**.
-- La URL del proxy depende del ID del pod: se mantiene al detener y reanudar el mismo pod y cambia si creas otro.
-- Antes de parar, ejecuta la celda 11 (copia de la sesión en `/workspace/FRUTINOVELAS/sesiones/`).
+- La URL del proxy depende del ID del pod: se mantiene al reanudar el mismo pod y cambia con un pod nuevo.
+- Con un **volumen de red** los modelos se conservan aunque borres el pod (mismo centro de datos).
 
-## Diferencias con Colab
-
-| | Colab | RunPod |
-|---|---|---|
-| Acceso público | Cloudflare Quick Tunnel (URL nueva cada sesión) | Proxy de RunPod (URL estable por pod) |
-| Persistencia | Google Drive (opcional) | `/workspace` (volumen) |
-| Secretos | Panel 🔑 de Colab | Secrets de RunPod como variables de entorno |
-| Gateway escucha en | `127.0.0.1` (el túnel conecta en local) | `0.0.0.0` (lo exige el proxy), siempre con token |
-| Alternativas | `named` (túnel Cloudflare con nombre) | `quick` o `named` también disponibles en la celda 1 |
+> [!NOTE]
+> Tras reanudar el pod, `start` detecta que faltan los paquetes pip (el disco del contenedor se borra),
+> los reinstala solo y después arranca. Los modelos no se vuelven a descargar.
 
 ## Problemas frecuentes
 
 | Síntoma | Solución |
 |---|---|
-| Celda 8: «no responde. Expose HTTP Ports…» | *Edit Pod* → añade `8189` a HTTP Ports. El pod se reinicia: vuelve a la celda 1 |
-| `RUNPOD_POD_ID no está definido` | No estás en un pod de RunPod: usa `MODO_TUNEL = "quick"` |
-| `No existe /workspace` | Crea el pod con disco de volumen o volumen de red |
-| Error de memoria en la celda 10 | Usa una GPU con más VRAM |
+| «no responde. Expose HTTP Ports…» | *Edit Pod* → añade `8189` a HTTP Ports. El pod se reinicia: ejecuta `start` |
+| `RUNPOD_POD_ID no existe` | No estás en RunPod: `fruti start --acceso quick` |
+| `fruti: command not found` | Pod reiniciado: usa la ruta completa `python3 /workspace/frutinovelas-kit/scripts/fruti_remote.py start` |
+| Error de memoria en `fruti test` | GPU con más VRAM |
+| Errores de validación en `start` | El ComfyUI no coincide con tu flujo; esos flujos no se publican. Revisa el detalle |
 | 502 al descargar resultados grandes | Repite; el proxy corta peticiones que tardan más de ~100 s sin enviar datos |
-| Las variables `HF_TOKEN`/`FRUTI_GATEWAY_TOKEN` no aparecen | Revisa la sintaxis `{{ RUNPOD_SECRET_nombre }}` y reinicia el pod |
+| No aparecen `HF_TOKEN` / `FRUTI_GATEWAY_TOKEN` | Revisa la sintaxis `{{ RUNPOD_SECRET_nombre }}` y reinicia el pod |

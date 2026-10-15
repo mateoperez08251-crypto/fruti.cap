@@ -781,6 +781,9 @@ def cmd_start(a) -> None:
     c = aplicar_flags(a)
     ensure_dirs()
     verificar_kit()
+    if not PIP_MARKER.exists() or PIP_MARKER.read_text().strip() != COMFY_COMMIT:
+        say("Dependencias ausentes en este contenedor (¿pod reanudado?): se reinstalan.")
+        cmd_install()
     instalar_atajo()
     stats, object_info = arrancar_comfy()
     informe = exportar_y_validar(object_info, getattr(a, "reexportar", False))
