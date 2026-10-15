@@ -1,12 +1,10 @@
-"""Genera las libretas de FRUTINOVELAS para Colab y RunPod desde una sola fuente.
+"""Genera ``notebooks/FRUTINOVELAS_ComfyUI_Imagenes_H3_Colab.ipynb``.
 
-- ``notebooks/FRUTINOVELAS_ComfyUI_Imagenes_H3_Colab.ipynb``
-- ``notebooks/FRUTINOVELAS_ComfyUI_Imagenes_H3_RunPod.ipynb``
+RunPod no usa libreta: se maneja por comandos con ``scripts/fruti_remote.py``.
 
-Cada libreta es autocontenida: incrusta (visibles, sin base64) los scripts del kit,
+La libreta es autocontenida: incrusta (visibles, sin base64) los scripts del kit,
 el manifiesto de modelos, los perfiles y el flujo H3 del usuario sin modificar.
-Solo cambian la cabecera de configuración (rutas, persistencia, acceso público) y
-la introducción. Se regeneran siempre con este script::
+Se regenera siempre con este script::
 
     uv run python scripts/build_colab_notebook.py
 """
@@ -106,40 +104,6 @@ if GUARDAR_MODELOS_EN_DRIVE:
 PERSIST_DIR = DRIVE_ROOT if (USAR_DRIVE and IN_COLAB) else None
 # El entorno de Colab se borra al desconectar: la marca de dependencias vive con él.
 PIP_MARKER = COMFY_DIR / ".frutinovelas_pip_ok"
-'''
-
-CONFIG_HEAD_RUNPOD = r'''# 1 · Configuración (RunPod) — cambia los valores de estas líneas si lo necesitas
-PERFIL_VIDEO = "h3_balanced_default"  # "h3_balanced_default" | "h3_quality_bf16_optional"
-ACTIVAR_QWEN_2512_T2I = False
-QWEN_EDIT_2511 = "no"  # "no" | "fp8mixed" | "bf16"
-VERIFICAR_SHA256 = True
-MODO_TUNEL = "runpod_proxy"  # "runpod_proxy" | "quick" | "named" | "ninguno"
-
-import json
-import os
-import signal
-import sys
-import time
-from pathlib import Path
-
-PLATAFORMA = "runpod"
-BASE_DIR = Path("/workspace")
-if not BASE_DIR.is_dir():
-    raise SystemExit("❌ No existe /workspace. Crea el pod con disco de volumen o con un volumen de red.")
-KIT_DIR = BASE_DIR / "FRUTINOVELAS_kit"
-COMFY_DIR = BASE_DIR / "ComfyUI"
-DATA_DIR = BASE_DIR / "FRUTINOVELAS_data"
-MODELS_DIR = BASE_DIR / "FRUTINOVELAS_models"
-IN_COLAB = False
-USAR_DRIVE = False
-# /workspace sobrevive a detener y reanudar el pod: modelos, ComfyUI, token y copias quedan ahí.
-PERSIST_DIR = BASE_DIR / "FRUTINOVELAS"
-# Los paquetes pip viven en el disco del contenedor, que se borra al reiniciar: la marca también.
-PIP_MARKER = Path("/root/.frutinovelas_pip_ok")
-POD_ID = os.environ.get("RUNPOD_POD_ID")
-print("Pod:", POD_ID or "⚠️ RUNPOD_POD_ID no definido (¿no estás en RunPod?)")
-if MODO_TUNEL == "runpod_proxy":
-    print("Recuerda: el pod debe exponer el puerto HTTP 8189 (Edit Pod → Expose HTTP Ports). NO expongas el 8188.")
 '''
 
 CONFIG_COMMON = r'''
@@ -1041,39 +1005,7 @@ STEPS_VARS = {
         "reconexion": "Si Colab se desconecta: vuelve a ejecutar las celdas 1–9 (el token guardado en Drive se reutiliza; "
         "la URL del Quick Tunnel cambia).",
     },
-    "runpod": {
-        "url_ejemplo": "https://IDDELPOD-8189.proxy.runpod.net",
-        "reconexion": "Si detienes y reanudas el pod: vuelve a ejecutar las celdas 1–9. Modelos, ComfyUI y token siguen en "
-        "`/workspace`; solo se reinstalan los paquetes pip. La URL se mantiene mientras sea el mismo pod.",
-    },
 }
-
-INTRO_RUNPOD = """# 🍓 FRUTINOVELAS · ComfyUI en RunPod (H3 + imágenes Qwen)
-
-Prepara **ComfyUI v0.40.0** con tu flujo **H3 EQUILIBRADO 9:16 (inicio / inicio+final)** en un pod de RunPod y lo publica
-con token para que **FRUTINOVELAS Studio** (en tu PC) lo use como motor. Es la misma lógica que la libreta de Colab.
-
-**Configuración del pod (antes de abrir esta libreta)**
-
-| Ajuste | Valor |
-|---|---|
-| Plantilla | Oficial **Runpod PyTorch** reciente (CUDA 12.8 o superior), con JupyterLab |
-| GPU | Recomendado ≥ 80 GB VRAM (H100 / H200 / A100 80 GB / RTX PRO 6000) — requisito real no verificado |
-| Disco del contenedor | ≥ 40 GB |
-| Disco de volumen (`/workspace`) | ≥ 80 GB solo H3 · ≥ 150 GB con Qwen · ≥ 200 GB con perfil BF16 |
-| Expose HTTP Ports | `8888` (Jupyter) y **`8189`** (gateway FRUTINOVELAS). **No** expongas `8188` |
-| Variables de entorno | `HF_TOKEN = {{ RUNPOD_SECRET_hf_token }}` · `FRUTI_GATEWAY_TOKEN = {{ RUNPOD_SECRET_fruti_gateway_token }}` (opcionales) |
-
-**Cómo usarla**: sube este `.ipynb` a JupyterLab (arrastrar y soltar en `/workspace`), ábrelo y ejecuta las celdas en orden.
-Las pruebas (10) y la parada (11) están desactivadas por defecto, así que *Run All* es seguro.
-
-> ⚠️ **Avisos**
-> - El proxy de RunPod es público: cualquiera con la URL llega al gateway, por eso **todo** exige token salvo `/healthz`. ComfyUI escucha solo en `127.0.0.1`.
-> - El proxy corta peticiones sin respuesta tras ~100 s; el programa usa peticiones cortas, WebSocket y consulta del historial.
-> - Detener el pod no borra `/workspace`, pero el volumen sigue cobrando. Borra el pod si no lo vas a usar.
-> - Hasta que la celda 10 termine con éxito, la compatibilidad real es **pendiente de prueba**.
-> - No guardes la libreta con la salida de la celda 9B visible.
-"""
 
 PLATFORMS = {
     "colab": {
@@ -1085,16 +1017,6 @@ PLATFORMS = {
             "accelerator": "GPU",
             "colab": {"provenance": [], "gpuType": "A100", "machine_shape": "hm", "toc_visible": True},
             "kernelspec": {"display_name": "Python 3", "name": "python3"},
-            "language_info": {"name": "python"},
-        },
-    },
-    "runpod": {
-        "out": ROOT / "notebooks" / "FRUTINOVELAS_ComfyUI_Imagenes_H3_RunPod.ipynb",
-        "kit": "/workspace/FRUTINOVELAS_kit",
-        "intro": INTRO_RUNPOD,
-        "config_head": CONFIG_HEAD_RUNPOD,
-        "metadata": {
-            "kernelspec": {"display_name": "Python 3 (ipykernel)", "language": "python", "name": "python3"},
             "language_info": {"name": "python"},
         },
     },
