@@ -8,7 +8,9 @@ export function ConnectionPage() {
   const qc = useQueryClient()
   const toast = useToast()
   const connection = useQuery({ queryKey: ['comfy-connection'], queryFn: api.comfyConnection })
-  const status = useQuery({ queryKey: ['status'], queryFn: api.status, refetchInterval: 10_000, retry: 0 })
+  // StatusBar owns the timer; this observer shares its cached result.
+  const status = useQuery({ queryKey: ['status'], queryFn: ({ signal }) => api.status(signal),
+    staleTime: 30_000, refetchOnWindowFocus: true, retry: 0 })
   const [url, setUrl] = useState<string | null>(null)
   const [token, setToken] = useState('')
   const save = useMutation({

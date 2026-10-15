@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from frutinovelas.config import get_settings
 from frutinovelas.db import get_session, session_factory
-from frutinovelas.models import ComfyConnection, GenerationJob
+from frutinovelas.models import ComfyConnection, GenerationJob, Scene
 from frutinovelas.services import generation as svc
 from frutinovelas.services import scenes
 from frutinovelas.services.comfy import ComfyClient, ComfyError, cipher, validate_url
@@ -92,16 +92,9 @@ def generate_scene(scene_id: str, body: GenerateInput, session: Session = Depend
 
 @router.get("/scenes/{scene_id}/generations")
 def scene_generations(scene_id: str, session: Session = Depends(get_session)):
-    try:
-        scenes.load_scene(session, scene_id)
-    except scenes.NotFound as exc:
-        raise HTTPException(404, str(exc)) from exc
-    jobs = session.scalars(
-        select(GenerationJob)
-        .where(GenerationJob.scene_id == scene_id)
-        .order_by(GenerationJob.created_at.desc())
-    )
-    return [svc.public_job(j) for j in jobs]
+    if session.scalar(select(Scene.id).where(Scene.id == scene_id)) is None:
+        raise HTTPException(404, "Escena no encontrada.")
+    return svc.list_public_jobs(session, scene_id)
 
 
 def _job(session, id):

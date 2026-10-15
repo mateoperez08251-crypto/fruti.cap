@@ -142,7 +142,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   let res: Response
   try {
     res = await fetch(BASE + path, init)
-  } catch {
+  } catch (error) {
+    if (init.signal?.aborted) throw error
     throw new ApiError(0, 'No hay conexión con el servidor de FRUTINOVELAS Studio.')
   }
   if (res.status === 204) return undefined as T
@@ -159,11 +160,11 @@ const json = (method: string, data: unknown): RequestInit => ({
 
 export const api = {
   checkPrompt: (data: PromptCheckInput) => request<PromptIssue[]>('/prompts/lint', json('POST', data)),
-  status: () => request<SystemStatus>('/system/status'),
+  status: (signal?: AbortSignal) => request<SystemStatus>('/system/status', { signal }),
   comfyConnection: () => request<ComfyConnection>('/comfy/connection'),
   saveComfyConnection: (url: string, token: string) =>
     request<ComfyConnection>('/comfy/connection', json('PUT', { url, token })),
-  generations: (sceneId: string) => request<Generation[]>(`/scenes/${sceneId}/generations`),
+  generations: (sceneId: string, signal?: AbortSignal) => request<Generation[]>(`/scenes/${sceneId}/generations`, { signal }),
   generateScene: (sceneId: string, expectedRevision: number, requestId: string) =>
     request<Generation>(`/scenes/${sceneId}/generate`, json('POST', { expected_revision: expectedRevision, request_id: requestId })),
   abandonGeneration: (id: string) => request<Generation>(`/generations/${id}/abandon`, { method: 'POST' }),
@@ -192,7 +193,7 @@ export const api = {
   deleteScene: (id: string) => request<void>(`/scenes/${id}`, { method: 'DELETE' }),
   reorderScenes: (chapterId: string, sceneIds: string[]) =>
     request<Scene[]>(`/chapters/${chapterId}/scene-order`, json('PUT', { scene_ids: sceneIds })),
-  revisions: (sceneId: string) => request<SceneRevision[]>(`/scenes/${sceneId}/revisions`),
+  revisions: (sceneId: string, signal?: AbortSignal) => request<SceneRevision[]>(`/scenes/${sceneId}/revisions`, { signal }),
 
   uploadAsset: (file: File, signal?: AbortSignal) => {
     const fd = new FormData()

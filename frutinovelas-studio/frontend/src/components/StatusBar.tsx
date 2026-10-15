@@ -7,8 +7,11 @@ const gb = (bytes: number) => `${(bytes / 1024 ** 3).toFixed(1)} GB`
 export function StatusBar() {
   const { data, isError } = useQuery({
     queryKey: ['status'],
-    queryFn: api.status,
-    refetchInterval: 10_000,
+    queryFn: ({ signal }) => api.status(signal),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    refetchIntervalInBackground: false,
     retry: 0,
   })
 

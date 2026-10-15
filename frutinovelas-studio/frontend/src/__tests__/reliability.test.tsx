@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, expect, test, vi } from 'vitest'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import App from '../App'
-import { api, type Asset, type Chapter, type Project, type Scene } from '../api'
+import { api, type Asset, type Chapter, type Generation, type Project, type Scene } from '../api'
 import { ToastProvider } from '../components/Toast'
 
 const asset: Asset = { id: 'a1', kind: 'image', sha256: 'abc', size_bytes: 1, mime: 'image/png', width: 576, height: 1024, original_name: 'start.png', created_at: '2026-01-01' }
@@ -53,6 +53,8 @@ afterEach(() => {
   router?.dispose()
   Object.assign(api, originalApi)
   vi.restoreAllMocks()
+  vi.useRealTimers()
+  focusManager.setFocused(undefined)
 })
 
 test('reordering retains the implicitly selected scene and its literal draft', async () => {
@@ -156,4 +158,106 @@ test('navigation to a different scene query protects the active draft', async ()
   vi.mocked(window.confirm).mockReturnValue(true)
   await act(async () => { await router.navigate('/capitulos/c1?escena=s2') })
   await screen.findByDisplayValue('Original dos')
+})
+
+const job = (id: string, state: Generation['state']): Generation => ({
+  id, scene_id: 's1', state, error: '', revision_number: 1, duration_seconds: 5,
+  frames: 124, effective_seconds: 124 / 24, seed: 1, created_at: '2026-01-01',
+  result_url: state === 'completed' ? `/api/v1/generations/${id}/content` : null,
+})
+const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms) })
+
+test('idle polling stays slow, pauses while hidden and does not start generations', async () => {
+  vi.useFakeTimers()
+  focusManager.setFocused(true)
+  const generations = vi.fn<typeof api.generations>(async () => [])
+  const generate = vi.fn<typeof api.generateScene>()
+  setup({ generations, generateScene: generate })
+  await advance(50)
+  expect(generations).toHaveBeenCalledOnce()
+  await advance(20_000)
+  expect(generations).toHaveBeenCalledOnce()
+  await advance(10_000)
+  expect(generations).toHaveBeenCalledTimes(2)
+  act(() => focusManager.setFocused(false))
+  await advance(60_000)
+  expect(generations).toHaveBeenCalledTimes(2)
+  act(() => focusManager.setFocused(true))
+  await advance(30_000)
+  expect(generations.mock.calls.length).toBeGreaterThan(2)
+  expect(generate).not.toHaveBeenCalled()
+})
+
+test('progress polls active jobs promptly and slows after completion', async () => {
+  vi.useFakeTimers()
+  focusManager.setFocused(true)
+  const generations = vi.fn<typeof api.generations>()
+    .mockResolvedValueOnce([job('v1', 'running')])
+    .mockResolvedValue([job('v1', 'completed')])
+  setup({ generations })
+  await advance(50)
+  expect(generations).toHaveBeenCalledOnce()
+  await advance(2500)
+  expect(generations).toHaveBeenCalledTimes(2)
+  expect(screen.getByText('Video disponible')).toBeTruthy()
+  await advance(10_000)
+  expect(generations).toHaveBeenCalledTimes(2)
+  await advance(20_000)
+  expect(generations).toHaveBeenCalledTimes(3)
+})
+
+test('uncertain submissions are checked less frequently without resending', async () => {
+  vi.useFakeTimers()
+  focusManager.setFocused(true)
+  const generations = vi.fn<typeof api.generations>(async () => [job('v1', 'unknown')])
+  const generate = vi.fn<typeof api.generateScene>()
+  setup({ generations, generateScene: generate })
+  await advance(50)
+  await advance(10_000)
+  expect(generations).toHaveBeenCalledOnce()
+  await advance(5000)
+  expect(generations).toHaveBeenCalledTimes(2)
+  expect(generate).not.toHaveBeenCalled()
+})
+
+test('leaving the scene cancels its pending progress read', async () => {
+  const pending = deferred<Generation[]>()
+  const generations = vi.fn<typeof api.generations>(() => pending.promise)
+  setup({ generations })
+  await screen.findByDisplayValue('Original uno')
+  await waitFor(() => expect(generations).toHaveBeenCalledOnce())
+  const signal = generations.mock.calls[0][1]
+  expect(signal?.aborted).toBe(false)
+  click('tab-guion')
+  await screen.findByDisplayValue('Guion guardado')
+  expect(signal?.aborted).toBe(true)
+  await act(async () => pending.resolve([]))
+})
+
+test('old video players mount on demand and never preload their media', async () => {
+  setup({ generations: async () => Array.from({ length: 12 }, (_, i) => job(`v${i}`, 'completed')) })
+  await screen.findAllByText('Video disponible')
+  expect(document.querySelectorAll('video')).toHaveLength(3)
+  fireEvent.click(screen.getByText('Ver versiones anteriores (9)'))
+  expect(document.querySelectorAll('video')).toHaveLength(8)
+  fireEvent.click(screen.getByText('Ver versiones anteriores (4)'))
+  const videos = document.querySelectorAll('video')
+  expect(videos).toHaveLength(12)
+  for (const video of videos) expect(video.preload).toBe('none')
+})
+
+test('opening connection settings does not add a second system polling timer', async () => {
+  vi.useFakeTimers()
+  const status = vi.fn<typeof api.status>(async () => ({ app_version: 'test',
+    comfyui: { url: 'http://comfy', reachable: true, version: '1', detail: null },
+    storage: { data_dir: '/tmp', free_bytes: 999999999, low_space: false }, ffmpeg: true }))
+  setup({ status })
+  await advance(50)
+  expect(status).toHaveBeenCalledOnce()
+  await advance(3000)
+  await act(async () => { await router.navigate('/conexion') })
+  await advance(20_000)
+  expect(status).toHaveBeenCalledOnce()
+  await advance(10_000)
+  expect(status).toHaveBeenCalledTimes(2)
 })

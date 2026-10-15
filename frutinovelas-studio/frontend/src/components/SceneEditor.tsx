@@ -77,7 +77,7 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
 
   const history = useQuery({
     queryKey: ['revisions', scene.id, base.revision_number],
-    queryFn: () => api.revisions(scene.id),
+    queryFn: ({ signal }) => api.revisions(scene.id, signal),
     enabled: showHistory,
   })
 

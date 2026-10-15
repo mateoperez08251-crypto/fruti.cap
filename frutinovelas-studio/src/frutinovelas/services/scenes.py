@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from frutinovelas.models import Asset, AuditEvent, Chapter, GenerationJob, Scene, SceneRevision
 from frutinovelas.schemas import AssetOut, SceneCreate, SceneOut, SceneUpdate
@@ -52,7 +52,10 @@ def scene_status(rev: SceneRevision | None) -> str:
 
 
 def to_out(scene: Scene) -> SceneOut:
-    rev = scene.current
+    return _to_out(scene, scene.current)
+
+
+def _to_out(scene: Scene, rev: SceneRevision | None) -> SceneOut:
     start = rev.start_asset if rev else None
     end = rev.end_asset if rev else None
     mode = None
@@ -76,6 +79,35 @@ def to_out(scene: Scene) -> SceneOut:
         status=scene_status(rev),
         updated_at=scene.updated_at,
     )
+
+
+def latest_revision_number():
+    """Correlated lookup uses the existing unique (scene_id, number) index."""
+    return (
+        select(func.max(SceneRevision.number))
+        .where(SceneRevision.scene_id == Scene.id)
+        .correlate(Scene)
+        .scalar_subquery()
+    )
+
+
+def current_revision_join():
+    return and_(
+        SceneRevision.scene_id == Scene.id,
+        SceneRevision.number == latest_revision_number(),
+    )
+
+
+def list_scene_outputs(session: Session, chapter_id: str) -> list[SceneOut]:
+    """List only current references/content; history is read explicitly, never replaced."""
+    rows = session.execute(
+        select(Scene, SceneRevision)
+        .outerjoin(SceneRevision, current_revision_join())
+        .where(Scene.chapter_id == chapter_id)
+        .order_by(Scene.order_index)
+        .options(joinedload(SceneRevision.start_asset), joinedload(SceneRevision.end_asset))
+    )
+    return [_to_out(scene, rev) for scene, rev in rows]
 
 
 def load_scene(session: Session, scene_id: str) -> Scene:

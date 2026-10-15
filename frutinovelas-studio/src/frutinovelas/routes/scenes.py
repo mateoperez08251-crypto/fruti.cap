@@ -51,7 +51,7 @@ def _handle(exc: Exception) -> HTTPException:
 @router.get("/chapters/{chapter_id}/scenes", response_model=list[SceneOut], responses=ERRORS)
 def list_scenes(chapter_id: str, session: Session = Depends(get_session)):
     _chapter_or_404(session, chapter_id)
-    return [svc.to_out(s) for s in svc.list_scenes(session, chapter_id)]
+    return svc.list_scene_outputs(session, chapter_id)
 
 
 @router.post("/chapters/{chapter_id}/scenes", response_model=SceneOut, status_code=201, responses=ERRORS)
@@ -76,7 +76,7 @@ def reorder(chapter_id: str, data: SceneOrder, session: Session = Depends(get_se
         raise _handle(exc) from exc
     session.commit()
     session.expunge_all()
-    return [svc.to_out(s) for s in svc.list_scenes(session, chapter_id)]
+    return svc.list_scene_outputs(session, chapter_id)
 
 
 @router.get("/scenes/{scene_id}", response_model=SceneOut, responses=ERRORS)

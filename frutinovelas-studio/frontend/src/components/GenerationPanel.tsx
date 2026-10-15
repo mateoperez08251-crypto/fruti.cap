@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, Film, Loader2, RefreshCw } from 'lucide-react'
+import { memo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, ApiError, type Generation, type Scene } from '../api'
 import { useToast } from './Toast'
@@ -11,12 +12,21 @@ const labels: Record<Generation['state'], string> = {
   unknown: 'Comprobando recepción', completed: 'Video disponible', failed: 'Interrumpido o fallido',
 }
 
-export function GenerationPanel({ scene, dirty }: { scene: Scene; dirty: boolean }) {
+export const GenerationPanel = memo(function GenerationPanel({ scene, dirty }: { scene: Scene; dirty: boolean }) {
   const qc = useQueryClient()
   const toast = useToast()
+  const [visibleCount, setVisibleCount] = useState(3)
   const connection = useQuery({ queryKey: ['comfy-connection'], queryFn: api.comfyConnection })
-  const jobs = useQuery({ queryKey: ['generations', scene.id], queryFn: () => api.generations(scene.id),
-    refetchInterval: (q) => q.state.data?.some((j) => !terminal.has(j.state)) ? 2500 : 10_000 })
+  const jobs = useQuery({ queryKey: ['generations', scene.id],
+    queryFn: ({ signal }) => api.generations(scene.id, signal),
+    refetchInterval: (q) => {
+      if (q.state.status === 'error') return 30_000
+      const active = q.state.data?.find((j) => !terminal.has(j.state))
+      return active ? (active.state === 'unknown' ? 15_000 : 2500) : 30_000
+    },
+    refetchOnWindowFocus: true,
+    refetchIntervalInBackground: false,
+  })
   const active = jobs.data?.find((j) => !terminal.has(j.state))
   const durationOk = scene.duration_seconds >= 4 && scene.duration_seconds <= 15
   const ready = !dirty && !!scene.start_asset && !!scene.prompt.trim() && durationOk && connection.data?.configured && !connection.isError && !jobs.isError && !active
@@ -43,7 +53,7 @@ export function GenerationPanel({ scene, dirty }: { scene: Scene; dirty: boolean
       {active ? 'Generación en curso' : 'Generar esta escena'}</button>
     <p className="subtle">Se utiliza la revisión guardada. Las referencias se ajustan al centro para cubrir 576×1024, conservando los originales.</p>
     {jobs.isError && <p role="alert">No se pudo consultar el progreso. Pulsa actualizar cuando vuelva la conexión.</p>}
-    <div className="generation-list" aria-live="polite">{jobs.data?.map((job) => <article className="generation-item" key={job.id}>
+    <div className="generation-list" aria-live="polite">{jobs.data?.slice(0, visibleCount).map((job) => <article className="generation-item" key={job.id}>
       <div className="generation-heading"><strong>{labels[job.state]}</strong><span className="chip">r{job.revision_number}</span></div>
       <p className="subtle">{job.duration_seconds} s solicitados · {job.frames} frames · {job.effective_seconds.toFixed(2)} s efectivos · semilla {job.seed}</p>
       {job.revision_number !== scene.revision_number && <p className="subtle">Esta versión usa una revisión anterior de la escena.</p>}
@@ -51,8 +61,10 @@ export function GenerationPanel({ scene, dirty }: { scene: Scene; dirty: boolean
       {(job.state === 'unknown' || job.state === 'queued') && <button className="btn btn-ghost btn-sm" disabled={abandon.isPending} onClick={() => {
         if (window.confirm('Comprueba primero la cola de RunPod. Cerrar este registro no detiene una inferencia remota. ¿Ya comprobaste que puedes cerrar el trabajo?')) abandon.mutate(job.id)
       }}>{job.state === 'queued' ? 'Cancelar envío pendiente' : 'Marcar como interrumpida'}</button>}
-      {job.result_url && <><video className="generation-video" src={job.result_url} controls preload="metadata" />
+      {job.result_url && <><video className="generation-video" src={job.result_url} controls preload="none" />
         <a className="btn btn-sm" href={job.result_url + '?download=true'}><Download size={14} /> Descargar video</a></>}
     </article>)}</div>
+    {jobs.data && jobs.data.length > visibleCount && <button className="btn btn-ghost btn-sm"
+      onClick={() => setVisibleCount((count) => count + 5)}>Ver versiones anteriores ({jobs.data.length - visibleCount})</button>}
   </section>
-}
+})

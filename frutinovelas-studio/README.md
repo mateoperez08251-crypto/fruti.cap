@@ -55,6 +55,15 @@ Esta entrega añade generación individual de video desde imágenes ya elegidas.
 generación de imágenes con Qwen, el control de escenas mediante MCP y el montaje automático de capítulos siguen siendo
 integraciones separadas. Los scripts de RunPod y sus modelos se conservan.
 
+Los listados leen solo la revisión actual de cada escena; el historial completo se
+consulta al abrirlo. El progreso lee resúmenes sin cargar los flujos guardados.
+Se muestran inicialmente tres versiones y las anteriores se abren bajo demanda;
+los videos se descargan para reproducirlos al pulsar play, sin precargarlos al abrir
+el editor. El estado se consulta cada 30 segundos en reposo y el progreso cada 2,5
+segundos con trabajo activo (15 segundos si la recepción es incierta). El sondeo
+periódico se pausa con la pestaña oculta y se actualiza al volver. Estas consultas
+no inician inferencias: la GPU se usa al solicitar una generación.
+
 ## Comprobar los cambios
 
 ```powershell

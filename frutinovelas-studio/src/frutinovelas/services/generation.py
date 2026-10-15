@@ -82,21 +82,59 @@ def enqueue(session, scene_id, expected_revision, request_id):
 
 def public_job(job):
     # Do not serialize the snapshot or encrypted credentials to a browser/MCP client.
-    frames = max(5, round(job.snapshot["duration"] * 24))
-    frames += (5 - frames % 17) % 17
-    return dict(
+    return _public_job(
         id=job.id,
         scene_id=job.scene_id,
         state=job.state,
         error=job.error,
         revision_number=job.snapshot["revision_number"],
-        duration_seconds=job.snapshot["duration"],
-        frames=frames,
-        effective_seconds=frames / 24,
+        duration=job.snapshot["duration"],
         seed=job.snapshot["seed"],
         created_at=job.created_at,
         updated_at=job.updated_at,
-        result_url=f"/api/v1/generations/{job.id}/content" if job.result_path else None,
+        result_path=job.result_path,
+    )
+
+
+def list_public_jobs(session, scene_id):
+    # Polling needs only these three snapshot values, never the workflow, prompt or token.
+    rows = session.execute(
+        select(
+            GenerationJob.id,
+            GenerationJob.scene_id,
+            GenerationJob.state,
+            GenerationJob.error,
+            GenerationJob.created_at,
+            GenerationJob.updated_at,
+            GenerationJob.result_path,
+            GenerationJob.snapshot["revision_number"].as_integer().label("revision_number"),
+            GenerationJob.snapshot["duration"].as_float().label("duration"),
+            GenerationJob.snapshot["seed"].as_integer().label("seed"),
+        )
+        .where(GenerationJob.scene_id == scene_id)
+        .order_by(GenerationJob.created_at.desc())
+    )
+    return [_public_job(**row) for row in rows.mappings()]
+
+
+def _public_job(
+    *, id, scene_id, state, error, revision_number, duration, seed, created_at, updated_at, result_path
+):
+    frames = max(5, round(duration * 24))
+    frames += (5 - frames % 17) % 17
+    return dict(
+        id=id,
+        scene_id=scene_id,
+        state=state,
+        error=error,
+        revision_number=revision_number,
+        duration_seconds=duration,
+        frames=frames,
+        effective_seconds=frames / 24,
+        seed=seed,
+        created_at=created_at,
+        updated_at=updated_at,
+        result_url=f"/api/v1/generations/{id}/content" if result_path else None,
     )
 
 
