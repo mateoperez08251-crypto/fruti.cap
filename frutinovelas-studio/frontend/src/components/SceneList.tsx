@@ -17,12 +17,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { ArrowRight, ChevronDown, ChevronUp, GripVertical, ImageOff } from 'lucide-react'
 import { thumbUrl, type Scene } from '../api'
-
-export const STATUS_LABEL: Record<Scene['status'], string> = {
-  sin_imagen: 'Falta imagen',
-  sin_prompt: 'Falta prompt',
-  lista: 'Lista',
-}
+import { STATUS_LABEL } from '../labels'
 
 function Thumb({ id }: { id: string | undefined }) {
   if (!id)
