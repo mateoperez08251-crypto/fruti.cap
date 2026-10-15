@@ -1,122 +1,76 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useQuery } from '@tanstack/react-query'
+import { Clapperboard, FolderOpen, Home } from 'lucide-react'
+import { NavLink, Route, Routes, useParams } from 'react-router-dom'
+import { api } from './api'
+import { StatusBar } from './components/StatusBar'
+import { ChapterPage } from './pages/ChapterPage'
+import { ProjectPage } from './pages/ProjectPage'
+import { ProjectsPage } from './pages/ProjectsPage'
 
-function App() {
-  const [count, setCount] = useState(0)
-
+function Sidebar() {
+  const { data: projects } = useQuery({ queryKey: ['projects'], queryFn: () => api.projects() })
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <aside className="sidebar" aria-label="Navegación">
+      <div className="brand">
+        <div className="brand-mark">
+          <Clapperboard size={20} strokeWidth={2.4} />
         </div>
         <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
+          <div className="brand-name">FRUTINOVELAS</div>
+          <div className="brand-sub">Studio</div>
         </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
+      </div>
+      <NavLink to="/" end className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} id="nav-home">
+        <Home size={16} /> <span>Proyectos</span>
+      </NavLink>
+      {projects && projects.length > 0 && <div className="nav-label">Tus proyectos</div>}
+      {projects?.map((p) => (
+        <NavLink
+          key={p.id}
+          to={`/proyectos/${p.id}`}
+          className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+          title={p.name}
         >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+          <FolderOpen size={16} /> <span>{p.name}</span>
+        </NavLink>
+      ))}
+    </aside>
   )
 }
 
-export default App
+function ChapterRoute() {
+  const { chapterId } = useParams()
+  return <ChapterPage key={chapterId} chapterId={chapterId!} />
+}
+
+function ProjectRoute() {
+  const { projectId } = useParams()
+  return <ProjectPage key={projectId} projectId={projectId!} />
+}
+
+export default function App() {
+  return (
+    <div className="app">
+      <Sidebar />
+      <main className="main">
+        <Routes>
+          <Route path="/" element={<ProjectsPage />} />
+          <Route path="/proyectos/:projectId" element={<ProjectRoute />} />
+          <Route path="/capitulos/:chapterId" element={<ChapterRoute />} />
+          <Route
+            path="*"
+            element={
+              <div className="page empty">
+                <h2>Página no encontrada</h2>
+                <NavLink className="btn" to="/">
+                  Volver a proyectos
+                </NavLink>
+              </div>
+            }
+          />
+        </Routes>
+      </main>
+      <StatusBar />
+    </div>
+  )
+}
