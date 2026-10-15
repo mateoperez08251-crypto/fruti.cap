@@ -14,8 +14,11 @@ Uso::
 
     FRUTI_GATEWAY_TOKEN_FILE=/ruta/token.txt python comfy_gateway.py \
         --listen 127.0.0.1 --port 8189 --upstream http://127.0.0.1:8188 \
-        --workflows-dir /content/FRUTINOVELAS_data/workflows/api \
-        --identity-file /content/FRUTINOVELAS_data/identity.json
+        --workflows-dir $DATA_DIR/workflows/api \
+        --identity-file $DATA_DIR/identity.json
+
+``--listen 0.0.0.0`` solo cuando un proxy externo (p. ej. el de RunPod) debe alcanzarlo;
+el token se exige igualmente en todas las rutas salvo ``/healthz``.
 """
 
 from __future__ import annotations

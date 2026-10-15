@@ -1,4 +1,4 @@
-"""Comprueba desde el PC la conexión con el ComfyUI de Colab (gateway + túnel).
+"""Comprueba desde el PC la conexión con el ComfyUI remoto (Colab o RunPod) a través del gateway.
 
 Solo usa la biblioteca estándar. El token se lee de ``FRUTI_COMFY_TOKEN`` o se pide
 sin eco; nunca se acepta por argumento (quedaría en el historial) ni se imprime.
@@ -60,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
         paso(1, "Gateway en línea (/healthz)")
         st, _ = request(base + "/healthz")
         if st != 200:
-            print(f"    ERROR {st}: ¿está en marcha la celda 8 de Colab?")
+            print(f"    ERROR {st}: ¿está en marcha la celda 8 de la libreta? (RunPod: ¿puerto 8189 expuesto?)")
             return 1
 
         paso(2, "Rechaza peticiones sin token")
@@ -112,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:
             estado = "SHA-256 verificado" if esperado else "sin SHA-256 de referencia"
             print(f"    ✓ {nombre} ({len(json.loads(body))} nodos, {estado})")
     except (urllib.error.URLError, TimeoutError) as exc:
-        print(f"ERROR de red: {exc}. ¿Cambió la URL del túnel o se desconectó Colab?")
+        print(f"ERROR de red: {exc}. ¿Cambió la URL, se desconectó Colab o se detuvo el pod?")
         return 1
 
     print("\nConexión correcta. Usa esta URL y el token en FRUTINOVELAS Studio → Conexiones → ComfyUI.")

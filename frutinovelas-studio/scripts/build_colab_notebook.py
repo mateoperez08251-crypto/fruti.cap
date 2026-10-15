@@ -1,8 +1,12 @@
-"""Genera ``notebooks/FRUTINOVELAS_ComfyUI_Imagenes_H3_Colab.ipynb``.
+"""Genera las libretas de FRUTINOVELAS para Colab y RunPod desde una sola fuente.
 
-La libreta es autocontenida: incrusta (visibles, sin base64) los scripts del kit,
+- ``notebooks/FRUTINOVELAS_ComfyUI_Imagenes_H3_Colab.ipynb``
+- ``notebooks/FRUTINOVELAS_ComfyUI_Imagenes_H3_RunPod.ipynb``
+
+Cada libreta es autocontenida: incrusta (visibles, sin base64) los scripts del kit,
 el manifiesto de modelos, los perfiles y el flujo H3 del usuario sin modificar.
-Se regenera siempre con este script para que libreta y repositorio no diverjan::
+Solo cambian la cabecera de configuración (rutas, persistencia, acceso público) y
+la introducción. Se regeneran siempre con este script::
 
     uv run python scripts/build_colab_notebook.py
 """
@@ -14,8 +18,6 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "notebooks" / "FRUTINOVELAS_ComfyUI_Imagenes_H3_Colab.ipynb"
-KIT = "/content/FRUTINOVELAS_kit"
 
 UI_FILE = ROOT / "workflows" / "H3_EQUILIBRADO_9x16_INICIO_FINAL.ui.json"
 EMBEDDED = [
@@ -64,7 +66,7 @@ de forma segura para que **FRUTINOVELAS Studio** (que corre en tu PC) lo use com
 > - Nunca compartas el token ni guardes la libreta con la salida de la celda 9B visible.
 """
 
-CELL_CONFIG = r'''# @title 1 · Configuración
+CONFIG_HEAD_COLAB = r'''# @title 1 · Configuración
 PERFIL_VIDEO = "h3_balanced_default"  # @param ["h3_balanced_default", "h3_quality_bf16_optional"]
 ACTIVAR_QWEN_2512_T2I = False  # @param {type:"boolean"}
 QWEN_EDIT_2511 = "no"  # @param ["no", "fp8mixed", "bf16"]
@@ -80,25 +82,13 @@ import sys
 import time
 from pathlib import Path
 
-NOTEBOOK_VERSION = "1.0.0"
-COMFY_REPO = "https://github.com/Comfy-Org/ComfyUI.git"
-COMFY_TAG = "v0.40.0"
-COMFY_COMMIT = "3541246a9c997f4b8c32f9f88f3c985d02021c79"
-TEMPLATES_COMMIT = "3e89967349dd95fa68ce3b36966f41d642af8ea7"
-CLOUDFLARED_VERSION = "2026.10.0"
-COMFY_PORT = 8188
-GATEWAY_PORT = 8189
-UA = "FRUTINOVELAS-Colab/" + NOTEBOOK_VERSION
-H3_PROFILE_KEY = "h3_equilibrado_9x16"
-
-KIT_DIR = Path("/content/FRUTINOVELAS_kit")
-COMFY_DIR = Path("/content/ComfyUI")
-DATA_DIR = Path("/content/FRUTINOVELAS_data")
-MODELS_DIR = Path("/content/FRUTINOVELAS_models")
+PLATAFORMA = "colab"
+BASE_DIR = Path("/content")
+KIT_DIR = BASE_DIR / "FRUTINOVELAS_kit"
+COMFY_DIR = BASE_DIR / "ComfyUI"
+DATA_DIR = BASE_DIR / "FRUTINOVELAS_data"
+MODELS_DIR = BASE_DIR / "FRUTINOVELAS_models"
 DRIVE_ROOT = Path("/content/drive/MyDrive/FRUTINOVELAS")
-API_DIR = DATA_DIR / "workflows" / "api"
-LOG_DIR = DATA_DIR / "logs"
-UI_PATH = KIT_DIR / "workflows" / "H3_EQUILIBRADO_9x16_INICIO_FINAL.ui.json"
 
 IN_COLAB = "google.colab" in sys.modules
 if USAR_DRIVE and IN_COLAB:
@@ -112,10 +102,64 @@ if GUARDAR_MODELOS_EN_DRIVE:
         raise SystemExit("GUARDAR_MODELOS_EN_DRIVE necesita USAR_DRIVE activado.")
     MODELS_DIR = DRIVE_ROOT / "models"
     print("⚠️ Los modelos (≈40 GB o más) se guardarán en tu Drive. Comprueba que tienes espacio.")
+# Carpeta que sobrevive al cierre de la sesión (token, conexión, copias de cada sesión).
+PERSIST_DIR = DRIVE_ROOT if (USAR_DRIVE and IN_COLAB) else None
+# El entorno de Colab se borra al desconectar: la marca de dependencias vive con él.
+PIP_MARKER = COMFY_DIR / ".frutinovelas_pip_ok"
+'''
+
+CONFIG_HEAD_RUNPOD = r'''# 1 · Configuración (RunPod) — cambia los valores de estas líneas si lo necesitas
+PERFIL_VIDEO = "h3_balanced_default"  # "h3_balanced_default" | "h3_quality_bf16_optional"
+ACTIVAR_QWEN_2512_T2I = False
+QWEN_EDIT_2511 = "no"  # "no" | "fp8mixed" | "bf16"
+VERIFICAR_SHA256 = True
+MODO_TUNEL = "runpod_proxy"  # "runpod_proxy" | "quick" | "named" | "ninguno"
+
+import json
+import os
+import signal
+import sys
+import time
+from pathlib import Path
+
+PLATAFORMA = "runpod"
+BASE_DIR = Path("/workspace")
+if not BASE_DIR.is_dir():
+    raise SystemExit("❌ No existe /workspace. Crea el pod con disco de volumen o con un volumen de red.")
+KIT_DIR = BASE_DIR / "FRUTINOVELAS_kit"
+COMFY_DIR = BASE_DIR / "ComfyUI"
+DATA_DIR = BASE_DIR / "FRUTINOVELAS_data"
+MODELS_DIR = BASE_DIR / "FRUTINOVELAS_models"
+IN_COLAB = False
+USAR_DRIVE = False
+# /workspace sobrevive a detener y reanudar el pod: modelos, ComfyUI, token y copias quedan ahí.
+PERSIST_DIR = BASE_DIR / "FRUTINOVELAS"
+# Los paquetes pip viven en el disco del contenedor, que se borra al reiniciar: la marca también.
+PIP_MARKER = Path("/root/.frutinovelas_pip_ok")
+POD_ID = os.environ.get("RUNPOD_POD_ID")
+print("Pod:", POD_ID or "⚠️ RUNPOD_POD_ID no definido (¿no estás en RunPod?)")
+if MODO_TUNEL == "runpod_proxy":
+    print("Recuerda: el pod debe exponer el puerto HTTP 8189 (Edit Pod → Expose HTTP Ports). NO expongas el 8188.")
+'''
+
+CONFIG_COMMON = r'''
+NOTEBOOK_VERSION = "1.1.0"
+COMFY_REPO = "https://github.com/Comfy-Org/ComfyUI.git"
+COMFY_TAG = "v0.40.0"
+COMFY_COMMIT = "3541246a9c997f4b8c32f9f88f3c985d02021c79"
+TEMPLATES_COMMIT = "3e89967349dd95fa68ce3b36966f41d642af8ea7"
+CLOUDFLARED_VERSION = "2026.10.0"
+COMFY_PORT = 8188
+GATEWAY_PORT = 8189
+UA = f"FRUTINOVELAS-{PLATAFORMA}/{NOTEBOOK_VERSION}"
+H3_PROFILE_KEY = "h3_equilibrado_9x16"
+API_DIR = DATA_DIR / "workflows" / "api"
+LOG_DIR = DATA_DIR / "logs"
+UI_PATH = KIT_DIR / "workflows" / "H3_EQUILIBRADO_9x16_INICIO_FINAL.ui.json"
 
 for d in [KIT_DIR / "scripts", KIT_DIR / "config", KIT_DIR / "workflows" / "templates", KIT_DIR / "bin",
           DATA_DIR / "workflows", API_DIR, DATA_DIR / "secrets", DATA_DIR / "tests",
-          DATA_DIR / "comfy_input", DATA_DIR / "comfy_output", LOG_DIR, MODELS_DIR]:
+          DATA_DIR / "comfy_input", DATA_DIR / "comfy_output", LOG_DIR, MODELS_DIR] + ([PERSIST_DIR] if PERSIST_DIR else []):
     d.mkdir(parents=True, exist_ok=True)
 os.chmod(DATA_DIR / "secrets", 0o700)
 
@@ -143,7 +187,18 @@ def estado(**cambios):
     return datos
 
 
+# Los PID solo valen dentro del mismo contenedor: /tmp se borra al reiniciar el pod o el entorno.
+SESSION_FILE = Path("/tmp/frutinovelas_session")
+if not SESSION_FILE.exists():
+    import uuid
+
+    SESSION_FILE.write_text(uuid.uuid4().hex)
+SESSION_ID = SESSION_FILE.read_text().strip()
 PROCS = json.loads(PIDS_FILE.read_text()) if PIDS_FILE.exists() else {}
+if PROCS.get("_session") != SESSION_ID:
+    PROCS = {"_session": SESSION_ID}
+    if STATE_FILE.exists():
+        estado(public_url=None, gateway_listen=None)
 
 
 def guardar_pids():
@@ -181,7 +236,8 @@ if QWEN_EDIT_2511 != "no":
 estado(perfiles=PERFILES_ACTIVOS, modo_tunel=MODO_TUNEL, notebook_version=NOTEBOOK_VERSION)
 print("Perfiles de modelos:", ", ".join(PERFILES_ACTIVOS))
 print("Modelos en:", MODELS_DIR)
-print("Drive:", "sí" if (USAR_DRIVE and IN_COLAB) else "no")
+print("Plataforma:", PLATAFORMA)
+print("Persistencia:", PERSIST_DIR or "ninguna (todo se borra al cerrar la sesión)")
 print("Túnel:", MODO_TUNEL)
 print("Secretos detectados:", ", ".join(n for n in ["HF_TOKEN", "FRUTI_GATEWAY_TOKEN", "CF_TUNNEL_TOKEN", "CF_TUNNEL_HOSTNAME"] if secreto(n)) or "ninguno")
 '''
@@ -200,11 +256,11 @@ def sh(cmd):
 
 gpu_line = sh("nvidia-smi --query-gpu=name,memory.total,compute_cap,driver_version --format=csv,noheader,nounits")
 if not gpu_line:
-    raise SystemExit("❌ No hay GPU. Ve a Entorno de ejecución → Cambiar tipo de entorno → GPU.")
+    raise SystemExit("❌ No hay GPU. Colab: Entorno de ejecución → Cambiar tipo → GPU. RunPod: crea el pod con GPU.")
 gpu_name, vram_mb, compute_cap, driver = [x.strip() for x in gpu_line.splitlines()[0].split(",")]
 vram_gb = float(vram_mb) / 1024
 ram_gb = int(open("/proc/meminfo").read().split("MemTotal:")[1].split()[0]) / 1024 / 1024
-disk = shutil.disk_usage("/content")
+disk = shutil.disk_usage(MODELS_DIR)
 
 try:
     import torch
@@ -233,7 +289,7 @@ pendiente = sum(MANIFEST["components"][k]["size"] for k in componentes_activos()
 
 print(f"GPU:     {gpu_name} · {vram_gb:.1f} GB VRAM · compute {compute_cap} · driver {driver}")
 print(f"RAM:     {ram_gb:.1f} GB")
-print(f"Disco:   {disk.free / 1e9:.1f} GB libres en /content")
+print(f"Disco:   {disk.free / 1e9:.1f} GB libres en {MODELS_DIR}")
 print(f"Python:  {platform.python_version()}")
 print(f"PyTorch: {torch_info}")
 print(f"FFmpeg:  {'sí' if shutil.which('ffmpeg') else 'no'}")
@@ -244,7 +300,7 @@ if vram_gb < 40:
     avisos.append("VRAM < 40 GB: H3 puede fallar por memoria o ir muy lento (requisito no verificado).")
 if ram_gb < 50:
     avisos.append("RAM < 50 GB: activa 'RAM alta' si tu plan lo permite; la carga de modelos puede fallar.")
-if not GUARDAR_MODELOS_EN_DRIVE and disk.free < pendiente + 15e9:
+if disk.free < pendiente + 15e9:
     avisos.append("Disco insuficiente para los modelos seleccionados (+15 GB de margen).")
 try:
     if float(compute_cap) < 10.0:
@@ -282,14 +338,17 @@ if actual != COMFY_COMMIT:
     run(f"git -C {COMFY_DIR} checkout -q --force {COMFY_COMMIT}")
 print("ComfyUI en commit", run(f"git -C {COMFY_DIR} rev-parse HEAD").strip(), f"({COMFY_TAG})")
 
-marca = COMFY_DIR / ".frutinovelas_pip_ok"
-if not marca.exists() or marca.read_text().strip() != COMFY_COMMIT:
+import shutil
+
+if not PIP_MARKER.exists() or PIP_MARKER.read_text().strip() != COMFY_COMMIT:
     run(f"{sys.executable} -m pip install -q -r requirements.txt", cwd=COMFY_DIR)
     run(f'{sys.executable} -m pip install -q -U "huggingface_hub[hf_xet]" playwright pillow requests aiohttp')
     run(f"{sys.executable} -m playwright install --with-deps chromium")
-    marca.write_text(COMFY_COMMIT)
+    PIP_MARKER.write_text(COMFY_COMMIT)
 else:
     print("Dependencias ya instaladas para este commit.")
+if not shutil.which("ffprobe"):
+    run("apt-get update -qq && apt-get install -y -qq ffmpeg")
 
 import importlib.metadata as md
 
@@ -563,7 +622,7 @@ if errores_totales:
 print("✅ Flujos API exportados y validados contra este ComfyUI:", ", ".join(INFORME["flujos"]))
 '''
 
-CELL_GATEWAY = r'''# @title 8 · Gateway con token + túnel Cloudflare
+CELL_GATEWAY = r'''# @title 8 · Gateway con token + acceso público (túnel Cloudflare o proxy RunPod)
 import re
 import secrets as _secrets
 import subprocess
@@ -572,21 +631,22 @@ import urllib.request
 import requests
 
 TOKEN_FILE = DATA_DIR / "secrets" / "gateway_token.txt"
-TOKEN_DRIVE = DRIVE_ROOT / "secrets" / "gateway_token.txt"
-token, origen = secreto("FRUTI_GATEWAY_TOKEN"), "Secretos de Colab"
+TOKEN_PERSIST = PERSIST_DIR / "secrets" / "gateway_token.txt" if PERSIST_DIR else None
+token, origen = secreto("FRUTI_GATEWAY_TOKEN"), "secreto FRUTI_GATEWAY_TOKEN"
 if not token and TOKEN_FILE.exists():
-    token, origen = TOKEN_FILE.read_text().strip(), "sesión actual"
-if not token and USAR_DRIVE and IN_COLAB and TOKEN_DRIVE.exists():
-    token, origen = TOKEN_DRIVE.read_text().strip(), "Drive"
+    token, origen = TOKEN_FILE.read_text().strip(), "guardado en esta máquina"
+if not token and TOKEN_PERSIST and TOKEN_PERSIST.exists():
+    token, origen = TOKEN_PERSIST.read_text().strip(), f"guardado en {PERSIST_DIR}"
 if not token:
     token, origen = _secrets.token_urlsafe(32), "generado ahora"
 if len(token) < 16:
     raise SystemExit("❌ El token del gateway debe tener al menos 16 caracteres.")
 TOKEN_FILE.write_text(token)
 os.chmod(TOKEN_FILE, 0o600)
-if USAR_DRIVE and IN_COLAB and origen == "generado ahora":
-    TOKEN_DRIVE.parent.mkdir(parents=True, exist_ok=True)
-    TOKEN_DRIVE.write_text(token)
+if TOKEN_PERSIST and origen == "generado ahora":
+    TOKEN_PERSIST.parent.mkdir(parents=True, exist_ok=True)
+    TOKEN_PERSIST.write_text(token)
+    os.chmod(TOKEN_PERSIST, 0o600)
 GATEWAY_TOKEN = token
 AUTH = {"Authorization": f"Bearer {GATEWAY_TOKEN}", "User-Agent": UA}
 print("Token del gateway:", origen, "· termina en …" + GATEWAY_TOKEN[-4:])
@@ -594,7 +654,8 @@ print("Token del gateway:", origen, "· termina en …" + GATEWAY_TOKEN[-4:])
 
 def escribir_identidad(extra=None):
     ident = {
-        "servicio": "frutinovelas-comfyui-colab",
+        "servicio": f"frutinovelas-comfyui-{PLATAFORMA}",
+        "plataforma": PLATAFORMA,
         "notebook_version": NOTEBOOK_VERSION,
         "comfyui_version": STATS.get("system", {}).get("comfyui_version"),
         "comfyui_commit": COMFY_COMMIT,
@@ -631,15 +692,25 @@ def gw_vivo():
         return False
 
 
+# Con el proxy de RunPod el gateway debe escuchar en todas las interfaces; sigue exigiendo token.
+# ComfyUI (8188) se queda siempre en 127.0.0.1 y nunca se expone.
+GATEWAY_LISTEN = "0.0.0.0" if MODO_TUNEL == "runpod_proxy" else "127.0.0.1"
+if gw_vivo() and estado().get("gateway_listen") != GATEWAY_LISTEN and PROCS.get("gateway"):
+    try:
+        os.killpg(int(PROCS.pop("gateway")), signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    time.sleep(1)
 if not gw_vivo():
     env = dict(os.environ, FRUTI_GATEWAY_TOKEN_FILE=str(TOKEN_FILE))
     env.pop("FRUTI_GATEWAY_TOKEN", None)
-    p = subprocess.Popen([sys.executable, str(KIT_DIR / "scripts" / "comfy_gateway.py"), "--listen", "127.0.0.1",
+    p = subprocess.Popen([sys.executable, str(KIT_DIR / "scripts" / "comfy_gateway.py"), "--listen", GATEWAY_LISTEN,
                           "--port", str(GATEWAY_PORT), "--upstream", LOCAL, "--workflows-dir", str(API_DIR),
                           "--identity-file", str(DATA_DIR / "identity.json")],
                          env=env, stdout=open(LOG_DIR / "gateway.log", "ab"), stderr=subprocess.STDOUT, start_new_session=True)
     PROCS["gateway"] = p.pid
     guardar_pids()
+    estado(gateway_listen=GATEWAY_LISTEN)
     for _ in range(40):
         if gw_vivo():
             break
@@ -653,7 +724,12 @@ print("✅ Gateway local OK (sin token → 401, con token → 200)")
 
 CF_BIN = KIT_DIR / "bin" / "cloudflared"
 PUBLIC_URL = None
-if MODO_TUNEL != "ninguno":
+if MODO_TUNEL == "runpod_proxy":
+    pod = os.environ.get("RUNPOD_POD_ID")
+    if not pod:
+        raise SystemExit("❌ RUNPOD_POD_ID no está definido: el modo runpod_proxy solo funciona dentro de un pod de RunPod.")
+    PUBLIC_URL = f"https://{pod}-{GATEWAY_PORT}.proxy.runpod.net"
+elif MODO_TUNEL in ("quick", "named"):
     if not CF_BIN.exists():
         url = f"https://github.com/cloudflare/cloudflared/releases/download/{CLOUDFLARED_VERSION}/cloudflared-linux-amd64"
         urllib.request.urlretrieve(url, CF_BIN)
@@ -683,26 +759,37 @@ if MODO_TUNEL != "ninguno":
     else:
         cf_token, host = secreto("CF_TUNNEL_TOKEN"), secreto("CF_TUNNEL_HOSTNAME")
         if not (cf_token and host):
-            raise SystemExit("❌ Para MODO_TUNEL='named' define CF_TUNNEL_TOKEN y CF_TUNNEL_HOSTNAME en Secretos.")
+            raise SystemExit("❌ Para MODO_TUNEL='named' define CF_TUNNEL_TOKEN y CF_TUNNEL_HOSTNAME.")
         env = dict(os.environ, TUNNEL_TOKEN=cf_token)
         p = subprocess.Popen([str(CF_BIN), "tunnel", "--no-autoupdate", "run"], env=env,
                              stdout=open(LOG_DIR / "cloudflared.log", "ab"), stderr=subprocess.STDOUT, start_new_session=True)
         PROCS["cloudflared"] = p.pid
         guardar_pids()
         PUBLIC_URL = "https://" + host.removeprefix("https://").rstrip("/")
+
+if PUBLIC_URL:
+    publico_ok = False
     for _ in range(60):
         try:
             if requests.get(PUBLIC_URL + "/healthz", timeout=10, headers={"User-Agent": UA}).ok:
+                publico_ok = True
                 break
         except Exception:
             pass
         time.sleep(2)
+    if not publico_ok:
+        if MODO_TUNEL == "runpod_proxy":
+            raise RuntimeError(f"{PUBLIC_URL} no responde. En RunPod: Edit Pod → Expose HTTP Ports → añade {GATEWAY_PORT} "
+                               "(el pod se reinicia; vuelve a ejecutar desde la celda 1).")
+        raise RuntimeError(f"{PUBLIC_URL} no responde. Revisa {LOG_DIR / 'cloudflared.log'}")
     r = requests.get(PUBLIC_URL + "/system_stats", headers=AUTH, timeout=30)
     if not r.ok:
-        raise RuntimeError(f"El túnel responde {r.status_code}. Revisa {LOG_DIR / 'cloudflared.log'}")
-    print("✅ Acceso público verificado con token")
+        raise RuntimeError(f"El acceso público responde {r.status_code} con token.")
+    if requests.get(PUBLIC_URL + "/system_stats", headers={"User-Agent": UA}, timeout=30).status_code != 401:
+        raise RuntimeError("⚠️ El acceso público NO exige token. Detén el pod y revisa la configuración.")
+    print("✅ Acceso público verificado (sin token → 401, con token → 200)")
 estado(public_url=PUBLIC_URL)
-print("URL pública:", PUBLIC_URL or "(sin túnel: solo accesible dentro de Colab)")
+print("URL pública:", PUBLIC_URL or "(sin acceso público: solo accesible dentro de la máquina)")
 '''
 
 CELL_CONNECTION = r'''# @title 9 · Datos de conexión para FRUTINOVELAS Studio (sin secretos)
@@ -713,16 +800,18 @@ conexion = {
     "comfyui_url": PUBLIC_URL,
     "autenticacion": "Authorization: Bearer <token>",
     "token": "NO INCLUIDO: cópialo desde la celda 9B y pégalo en el programa",
+    "plataforma": PLATAFORMA,
     "tunel": MODO_TUNEL,
     "flujos": sorted(INFORME["flujos"]),
     "identidad": {k: IDENTIDAD[k] for k in ("comfyui_version", "comfyui_commit", "perfil_video", "workflow_ui_sha256")},
     "creado": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-    "aviso": "La URL de un Quick Tunnel cambia en cada sesión de Colab.",
+    "aviso": {"quick": "La URL de un Quick Tunnel cambia en cada sesión.",
+              "runpod_proxy": "La URL depende del ID del pod: se mantiene mientras uses el mismo pod."}.get(MODO_TUNEL, ""),
 }
 ruta_conexion = DATA_DIR / "conexion_frutinovelas.json"
 ruta_conexion.write_text(json.dumps(conexion, ensure_ascii=False, indent=2))
-if USAR_DRIVE and IN_COLAB:
-    (DRIVE_ROOT / "conexion_frutinovelas.json").write_text(ruta_conexion.read_text())
+if PERSIST_DIR:
+    (PERSIST_DIR / "conexion_frutinovelas.json").write_text(ruta_conexion.read_text())
 print("═" * 70)
 print("  URL de ComfyUI para el programa:")
 print("   ", PUBLIC_URL)
@@ -891,12 +980,12 @@ if not (PROBAR_H3_SOLO_INICIO or PROBAR_H3_INICIO_FINAL or PROBAR_QWEN_2512):
     print("Ninguna prueba marcada. Recomendado: PROBAR_H3_SOLO_INICIO con 5 s.")
 '''
 
-CELL_FINISH = r'''# @title 11 · Guardar en Drive y (opcional) detener procesos
+CELL_FINISH = r'''# @title 11 · Guardar copia de la sesión y (opcional) detener procesos
 DETENER_PROCESOS = False  # @param {type:"boolean"}
 import shutil
 
-if USAR_DRIVE and IN_COLAB:
-    sesion = DRIVE_ROOT / "sesiones" / time.strftime("%Y%m%d_%H%M%S")
+if PERSIST_DIR:
+    sesion = PERSIST_DIR / "sesiones" / time.strftime("%Y%m%d_%H%M%S")
     (sesion / "workflows_api").mkdir(parents=True, exist_ok=True)
     for nombre in ["identity.json", "conexion_frutinovelas.json", "informe_exportacion.json", "estado.json"]:
         if (DATA_DIR / nombre).exists():
@@ -908,7 +997,7 @@ if USAR_DRIVE and IN_COLAB:
         shutil.copytree(DATA_DIR / "tests", sesion / "pruebas", dirs_exist_ok=True)
     print("✅ Guardado en", sesion, "(sin secretos)")
 else:
-    print("Drive desactivado: no se guarda nada fuera del entorno.")
+    print("Sin almacenamiento persistente: no se guarda nada fuera del entorno.")
 
 if DETENER_PROCESOS:
     for nombre in ["cloudflared", "gateway", "comfyui"]:
@@ -926,7 +1015,7 @@ if DETENER_PROCESOS:
         PROCS.pop(nombre, None)
     guardar_pids()
     estado(public_url=None)
-    print("✅ Procesos detenidos. Recuerda desconectar el entorno para no consumir saldo.")
+    print("✅ Procesos detenidos. Colab: desconecta el entorno. RunPod: detén el pod (el volumen sigue cobrando aunque esté parado).")
 else:
     print("Los procesos siguen en marcha. Marca DETENER_PROCESOS para pararlos.")
 '''
@@ -938,13 +1027,78 @@ STEPS_MD = """## Conectar FRUTINOVELAS Studio (en tu PC)
 
    ```powershell
    $env:FRUTI_COMFY_TOKEN = "PEGA_AQUI_EL_TOKEN"
-   uv run python scripts/check_colab_connection.py --url https://XXXX.trycloudflare.com
+   uv run python scripts/check_colab_connection.py --url {url_ejemplo}
    ```
 
    Descarga los flujos API exportados a `workflows/api/` y verifica sus SHA-256.
 3. En el programa: **Conexiones → ComfyUI** → pega URL y token → **Probar** → **Importar flujo**.
-4. Si Colab se desconecta: vuelve a ejecutar las celdas 1–9 (los modelos en Drive o el token guardado se reutilizan; la URL del Quick Tunnel cambia).
+4. {reconexion}
 """
+
+STEPS_VARS = {
+    "colab": {
+        "url_ejemplo": "https://XXXX.trycloudflare.com",
+        "reconexion": "Si Colab se desconecta: vuelve a ejecutar las celdas 1–9 (el token guardado en Drive se reutiliza; "
+        "la URL del Quick Tunnel cambia).",
+    },
+    "runpod": {
+        "url_ejemplo": "https://IDDELPOD-8189.proxy.runpod.net",
+        "reconexion": "Si detienes y reanudas el pod: vuelve a ejecutar las celdas 1–9. Modelos, ComfyUI y token siguen en "
+        "`/workspace`; solo se reinstalan los paquetes pip. La URL se mantiene mientras sea el mismo pod.",
+    },
+}
+
+INTRO_RUNPOD = """# 🍓 FRUTINOVELAS · ComfyUI en RunPod (H3 + imágenes Qwen)
+
+Prepara **ComfyUI v0.40.0** con tu flujo **H3 EQUILIBRADO 9:16 (inicio / inicio+final)** en un pod de RunPod y lo publica
+con token para que **FRUTINOVELAS Studio** (en tu PC) lo use como motor. Es la misma lógica que la libreta de Colab.
+
+**Configuración del pod (antes de abrir esta libreta)**
+
+| Ajuste | Valor |
+|---|---|
+| Plantilla | Oficial **Runpod PyTorch** reciente (CUDA 12.8 o superior), con JupyterLab |
+| GPU | Recomendado ≥ 80 GB VRAM (H100 / H200 / A100 80 GB / RTX PRO 6000) — requisito real no verificado |
+| Disco del contenedor | ≥ 40 GB |
+| Disco de volumen (`/workspace`) | ≥ 80 GB solo H3 · ≥ 150 GB con Qwen · ≥ 200 GB con perfil BF16 |
+| Expose HTTP Ports | `8888` (Jupyter) y **`8189`** (gateway FRUTINOVELAS). **No** expongas `8188` |
+| Variables de entorno | `HF_TOKEN = {{ RUNPOD_SECRET_hf_token }}` · `FRUTI_GATEWAY_TOKEN = {{ RUNPOD_SECRET_fruti_gateway_token }}` (opcionales) |
+
+**Cómo usarla**: sube este `.ipynb` a JupyterLab (arrastrar y soltar en `/workspace`), ábrelo y ejecuta las celdas en orden.
+Las pruebas (10) y la parada (11) están desactivadas por defecto, así que *Run All* es seguro.
+
+> ⚠️ **Avisos**
+> - El proxy de RunPod es público: cualquiera con la URL llega al gateway, por eso **todo** exige token salvo `/healthz`. ComfyUI escucha solo en `127.0.0.1`.
+> - El proxy corta peticiones sin respuesta tras ~100 s; el programa usa peticiones cortas, WebSocket y consulta del historial.
+> - Detener el pod no borra `/workspace`, pero el volumen sigue cobrando. Borra el pod si no lo vas a usar.
+> - Hasta que la celda 10 termine con éxito, la compatibilidad real es **pendiente de prueba**.
+> - No guardes la libreta con la salida de la celda 9B visible.
+"""
+
+PLATFORMS = {
+    "colab": {
+        "out": ROOT / "notebooks" / "FRUTINOVELAS_ComfyUI_Imagenes_H3_Colab.ipynb",
+        "kit": "/content/FRUTINOVELAS_kit",
+        "intro": INTRO,
+        "config_head": CONFIG_HEAD_COLAB,
+        "metadata": {
+            "accelerator": "GPU",
+            "colab": {"provenance": [], "gpuType": "A100", "machine_shape": "hm", "toc_visible": True},
+            "kernelspec": {"display_name": "Python 3", "name": "python3"},
+            "language_info": {"name": "python"},
+        },
+    },
+    "runpod": {
+        "out": ROOT / "notebooks" / "FRUTINOVELAS_ComfyUI_Imagenes_H3_RunPod.ipynb",
+        "kit": "/workspace/FRUTINOVELAS_kit",
+        "intro": INTRO_RUNPOD,
+        "config_head": CONFIG_HEAD_RUNPOD,
+        "metadata": {
+            "kernelspec": {"display_name": "Python 3 (ipykernel)", "language": "python", "name": "python3"},
+            "language_info": {"name": "python"},
+        },
+    },
+}
 
 
 # --------------------------------------------------------------------------- utilidades
@@ -960,9 +1114,9 @@ def code(text: str) -> dict:
     return {"cell_type": "code", "execution_count": None, "metadata": {}, "outputs": [], "source": lines(text.rstrip("\n"))}
 
 
-def writefile_cell(rel: str, src: Path) -> dict:
+def writefile_cell(rel: str, src: Path, kit: str) -> dict:
     content = src.read_text(encoding="utf-8").replace("\r\n", "\n")
-    return code(f"%%writefile {KIT}/{rel}\n{content}")
+    return code(f"%%writefile {kit}/{rel}\n{content}")
 
 
 def ui_cell() -> dict:
@@ -990,12 +1144,13 @@ def ui_cell() -> dict:
     return code(body)
 
 
-def build() -> dict:
-    cells = [md(INTRO), md("## 1 · Configuración"), code(CELL_CONFIG),
+def build(platform: str) -> dict:
+    p = PLATFORMS[platform]
+    cells = [md(p["intro"]), md("## 1 · Configuración"), code(p["config_head"] + CONFIG_COMMON),
              md("### 1.1–1.6 · Archivos del kit\nScripts y configuración del repositorio FRUTINOVELAS Studio, escritos tal cual. "
                 "No hace falta tocarlos.")]
     for rel, src in EMBEDDED:
-        cells.append(writefile_cell(rel, src))
+        cells.append(writefile_cell(rel, src, p["kit"]))
     cells.append(ui_cell())
     cells += [
         md("## 2 · Diagnóstico"), code(CELL_DIAG),
@@ -1005,30 +1160,21 @@ def build() -> dict:
         md("## 7 · ComfyUI"), code(CELL_START), code(CELL_EXPORT),
         md("## 8 · Conexión segura"), code(CELL_GATEWAY),
         md("## 9 · Datos para el programa"), code(CELL_CONNECTION), code(CELL_TOKEN),
-        md(STEPS_MD),
+        md(STEPS_MD.format(**STEPS_VARS[platform])),
         md("## 10 · Pruebas reales (opcional)"), code(CELL_TESTS),
         md("## 11 · Cierre"), code(CELL_FINISH),
     ]
     for i, c in enumerate(cells):
         c["id"] = f"fruti-{i:02d}"
-    return {
-        "nbformat": 4,
-        "nbformat_minor": 5,
-        "metadata": {
-            "accelerator": "GPU",
-            "colab": {"provenance": [], "gpuType": "A100", "machine_shape": "hm", "toc_visible": True},
-            "kernelspec": {"display_name": "Python 3", "name": "python3"},
-            "language_info": {"name": "python"},
-        },
-        "cells": cells,
-    }
+    return {"nbformat": 4, "nbformat_minor": 5, "metadata": p["metadata"], "cells": cells}
 
 
 def main() -> int:
-    nb = build()
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps(nb, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n")
-    print(f"Libreta generada: {OUT} ({len(nb['cells'])} celdas)")
+    for platform, p in PLATFORMS.items():
+        nb = build(platform)
+        p["out"].parent.mkdir(parents=True, exist_ok=True)
+        p["out"].write_text(json.dumps(nb, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n")
+        print(f"Libreta generada: {p['out']} ({len(nb['cells'])} celdas)")
     return 0
 
 
