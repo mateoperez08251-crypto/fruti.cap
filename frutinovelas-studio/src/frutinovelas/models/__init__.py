@@ -146,3 +146,28 @@ class AuditEvent(Base):
     entity_id: Mapped[str] = mapped_column(String(36), index=True)
     detail: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ComfyConnection(TimestampMixin, Base):
+    __tablename__ = "comfy_connections"
+    id: Mapped[str] = mapped_column(String(16), primary_key=True, default="default")
+    url: Mapped[str] = mapped_column(String(500))
+    encrypted_token: Mapped[str] = mapped_column(Text)
+    identity: Mapped[dict[str, Any]] = mapped_column(JSON)
+    workflow: Mapped[dict[str, Any]] = mapped_column(JSON)
+
+
+class GenerationJob(TimestampMixin, Base):
+    __tablename__ = "generation_jobs"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    scene_id: Mapped[str] = mapped_column(ForeignKey("scenes.id", ondelete="CASCADE"), index=True)
+    # NULL for finished jobs, unique scene ID for active ones: prevents double clicks.
+    active_scene_id: Mapped[str | None] = mapped_column(String(36), nullable=True, unique=True)
+    state: Mapped[str] = mapped_column(String(24), default="queued", index=True)
+    prompt_id: Mapped[str] = mapped_column(String(64))
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
+    encrypted_token: Mapped[str] = mapped_column(Text)
+    error: Mapped[str] = mapped_column(Text, default="")
+    result_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    result_mime: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    result_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)

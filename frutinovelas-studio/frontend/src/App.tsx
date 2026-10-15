@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
-import { Clapperboard, FolderOpen, Home } from 'lucide-react'
+import { Clapperboard, FolderOpen, Home, PlugZap } from 'lucide-react'
 import { NavLink, Route, Routes, useParams } from 'react-router-dom'
 import { api } from './api'
 import { StatusBar } from './components/StatusBar'
 import { ChapterPage } from './pages/ChapterPage'
 import { ProjectPage } from './pages/ProjectPage'
 import { ProjectsPage } from './pages/ProjectsPage'
+import { ConnectionPage } from './pages/ConnectionPage'
 
 function Sidebar() {
   const { data: projects } = useQuery({ queryKey: ['projects'], queryFn: () => api.projects() })
@@ -22,6 +23,9 @@ function Sidebar() {
       </div>
       <NavLink to="/" end className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} id="nav-home">
         <Home size={16} /> <span>Proyectos</span>
+      </NavLink>
+      <NavLink to="/conexion" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+        <PlugZap size={16} /> <span>Conexión ComfyUI</span>
       </NavLink>
       {projects && projects.length > 0 && <div className="nav-label">Tus proyectos</div>}
       {projects?.map((p) => (
@@ -55,6 +59,7 @@ export default function App() {
       <main className="main">
         <Routes>
           <Route path="/" element={<ProjectsPage />} />
+          <Route path="/conexion" element={<ConnectionPage />} />
           <Route path="/proyectos/:projectId" element={<ProjectRoute />} />
           <Route path="/capitulos/:chapterId" element={<ChapterRoute />} />
           <Route

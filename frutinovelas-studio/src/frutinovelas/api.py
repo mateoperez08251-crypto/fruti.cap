@@ -32,7 +32,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from frutinovelas import __version__
 from frutinovelas.config import APP_NAME, get_settings
 from frutinovelas.migrate import upgrade_to_head
-from frutinovelas.routes import assets, projects, scenes, system
+from frutinovelas.routes import assets, generation, projects, scenes, system
+from frutinovelas.worker import GenerationWorker
 
 log = logging.getLogger("frutinovelas.api")
 
@@ -77,7 +78,13 @@ async def lifespan(_app: FastAPI):
     settings = get_settings()
     upgrade_to_head()
     log.info("Datos en %s", settings.resolved_data_dir)
-    yield
+    worker = GenerationWorker()
+    if settings.embedded_worker:
+        worker.start()
+    try:
+        yield
+    finally:
+        worker.stop()
 
 
 def create_app() -> FastAPI:
@@ -105,7 +112,7 @@ def create_app() -> FastAPI:
                 return JSONResponse({"detail": "Se requiere autorización."}, status_code=401)
         return await call_next(request)
 
-    for module in (system, projects, scenes, assets):
+    for module in (system, projects, scenes, assets, generation):
         app.include_router(module.router, prefix=API_PREFIX)
 
     ui = frontend_dir()
@@ -169,11 +176,16 @@ def main(argv: list[str] | None = None) -> int:
             if not args.no_browser:
                 webbrowser.open(url)
             return 0
-        print(f"El puerto {args.port} está ocupado por otro programa. Usa --port con otro número.", file=sys.stderr)
+        print(
+            f"El puerto {args.port} está ocupado por otro programa. Usa --port con otro número.",
+            file=sys.stderr,
+        )
         return 1
 
     if frontend_dir() is None:
-        print("Aviso: la interfaz no está compilada (cd frontend && npm ci && npm run build).", file=sys.stderr)
+        print(
+            "Aviso: la interfaz no está compilada (cd frontend && npm ci && npm run build).", file=sys.stderr
+        )
 
     print(f"{APP_NAME} {__version__} — abre {url}  (Ctrl+C para detener)")
     if not args.no_browser:

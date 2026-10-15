@@ -59,6 +59,9 @@ class Settings(BaseSettings):
         default="http://127.0.0.1:8188",
         validation_alias=AliasChoices("COMFYUI_BASE_URL", "FRUTINOVELAS_COMFYUI_BASE_URL"),
     )
+    comfyui_token: str | None = Field(
+        default=None, validation_alias=AliasChoices("FRUTI_COMFY_TOKEN", "COMFYUI_TOKEN")
+    )
     ffmpeg_path: str = Field(default="ffmpeg", validation_alias=AliasChoices("FFMPEG_PATH", "FRUTINOVELAS_FFMPEG_PATH"))
     ffprobe_path: str = Field(
         default="ffprobe", validation_alias=AliasChoices("FFPROBE_PATH", "FRUTINOVELAS_FFPROBE_PATH")

@@ -15,6 +15,7 @@ from frutinovelas.db import reset_engine_cache
 def data_dir(tmp_path, monkeypatch):
     d = tmp_path / "datos ñ con espacios"
     monkeypatch.setenv("FRUTINOVELAS_DATA_DIR", str(d))
+    monkeypatch.setenv("FRUTINOVELAS_EMBEDDED_WORKER", "false")
     monkeypatch.setenv("FRUTINOVELAS_API_TOKEN", "")
     monkeypatch.delenv("FRUTINOVELAS_API_TOKEN", raising=False)
     reset_settings_cache()

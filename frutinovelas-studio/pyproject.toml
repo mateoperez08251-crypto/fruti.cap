@@ -17,6 +17,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "Pillow>=10.4",
     "platformdirs>=4.2",
+    "cryptography>=43",
     "mcp[cli]>=2.0,<3",
 ]
 

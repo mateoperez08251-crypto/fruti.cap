@@ -84,6 +84,27 @@ export type SystemStatus = {
   ffmpeg: boolean
 }
 
+export type ComfyConnection = {
+  url: string
+  configured: boolean
+  has_token: boolean
+  identity: { comfyui_version?: string; perfil_video?: string; estado_compatibilidad?: string }
+}
+
+export type Generation = {
+  id: string
+  scene_id: string
+  state: 'queued' | 'uploading' | 'submitting' | 'waiting' | 'running' | 'downloading' | 'unknown' | 'completed' | 'failed'
+  error: string
+  revision_number: number
+  duration_seconds: number
+  frames: number
+  effective_seconds: number
+  seed: number
+  created_at: string
+  result_url: string | null
+}
+
 export class ApiError extends Error {
   status: number
   constructor(status: number, message: string) {
@@ -125,6 +146,13 @@ const json = (method: string, data: unknown): RequestInit => ({
 
 export const api = {
   status: () => request<SystemStatus>('/system/status'),
+  comfyConnection: () => request<ComfyConnection>('/comfy/connection'),
+  saveComfyConnection: (url: string, token: string) =>
+    request<ComfyConnection>('/comfy/connection', json('PUT', { url, token })),
+  generations: (sceneId: string) => request<Generation[]>(`/scenes/${sceneId}/generations`),
+  generateScene: (sceneId: string, expectedRevision: number, requestId: string) =>
+    request<Generation>(`/scenes/${sceneId}/generate`, json('POST', { expected_revision: expectedRevision, request_id: requestId })),
+  abandonGeneration: (id: string) => request<Generation>(`/generations/${id}/abandon`, { method: 'POST' }),
 
   projects: (archived = false) => request<Project[]>(`/projects?archived=${archived}`),
   project: (id: string) => request<Project>(`/projects/${id}`),

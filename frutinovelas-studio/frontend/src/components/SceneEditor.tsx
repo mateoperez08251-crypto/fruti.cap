@@ -6,6 +6,7 @@ import { STATUS_LABEL } from '../labels'
 import { ConfirmDialog } from './Dialogs'
 import { ImageDrop, Lightbox } from './ImageDrop'
 import { useToast } from './Toast'
+import { GenerationPanel } from './GenerationPanel'
 
 type Draft = {
   title: string
@@ -350,6 +351,7 @@ export function SceneEditor({ scene, index, onDirtyChange, onDuplicated, onDelet
         </div>
       </div>
 
+      <GenerationPanel scene={base} dirty={dirty || save.isPending} />
       {zoom && <Lightbox asset={zoom} onClose={() => setZoom(null)} />}
       {confirmDelete && (
         <ConfirmDialog
