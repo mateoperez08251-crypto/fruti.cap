@@ -10,6 +10,28 @@ depends_on = None
 
 
 def upgrade():
+    bind = op.get_bind()
+    tables = set(sa.inspect(bind).get_table_names())
+    if "characters" not in tables:
+        _create_characters()
+    if "ix_characters_project_id" not in {i["name"] for i in sa.inspect(bind).get_indexes("characters")}:
+        op.create_index("ix_characters_project_id", "characters", ["project_id"])
+    columns = {c["name"] for c in sa.inspect(bind).get_columns("generation_jobs")}
+    if "kind" not in columns:
+        op.add_column(
+            "generation_jobs", sa.Column("kind", sa.String(16), server_default="video", nullable=False)
+        )
+    if "result_asset_id" not in columns:
+        op.add_column("generation_jobs", sa.Column("result_asset_id", sa.String(36), nullable=True))
+    if "chapter_renders" not in tables:
+        _create_chapter_renders()
+    if "ix_chapter_renders_chapter_id" not in {
+        i["name"] for i in sa.inspect(bind).get_indexes("chapter_renders")
+    }:
+        op.create_index("ix_chapter_renders_chapter_id", "chapter_renders", ["chapter_id"])
+
+
+def _create_characters():
     op.create_table(
         "characters",
         sa.Column("id", sa.String(36), primary_key=True),
@@ -25,10 +47,9 @@ def upgrade():
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.UniqueConstraint("project_id", "name", name="uq_character_project_name"),
     )
-    op.create_index("ix_characters_project_id", "characters", ["project_id"])
-    # Nullable result ID is additive; no rewrite of the jobs table or existing snapshots.
-    op.add_column("generation_jobs", sa.Column("kind", sa.String(16), server_default="video", nullable=False))
-    op.add_column("generation_jobs", sa.Column("result_asset_id", sa.String(36), nullable=True))
+
+
+def _create_chapter_renders():
     op.create_table(
         "chapter_renders",
         sa.Column("id", sa.String(36), primary_key=True),
@@ -43,7 +64,6 @@ def upgrade():
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     )
-    op.create_index("ix_chapter_renders_chapter_id", "chapter_renders", ["chapter_id"])
 
 
 def downgrade():

@@ -1,4 +1,4 @@
-﻿# FRUTINOVELAS Studio
+# FRUTINOVELAS Studio
 
 ## Abrir el programa en Windows
 
@@ -50,6 +50,17 @@ sin reenviar la solicitud. Si no se puede resolver, revisa la cola remota antes 
 La cola y los resultados se guardan en el directorio de datos del usuario, fuera del
 repositorio. El token se cifra con una clave local (`comfy_credentials.key`); incluye
 todo ese directorio si haces una copia de seguridad. No subas la clave ni los datos a Git.
+
+Antes de aplicar migraciones pendientes a una base SQLite existente, Studio crea una
+copia coherente (incluido WAL) en `backups/`, junto a la base. La migración `0004`
+recupera instalaciones antiguas cuya revisión de imágenes quedó incompleta, incluido
+el error `no such column: generation_jobs.kind`. Añade solo los objetos que falten y
+conserva personajes, guiones, referencias, versiones y credenciales. También puede
+retomar una `0003` parcialmente aplicada. No borres la base para resolver este error:
+actualiza el código y vuelve a iniciar Studio con las otras copias cerradas.
+Al terminar las migraciones se comprueban las columnas reales antes de arrancar la
+cola; si el esquema sigue incompleto, el inicio se detiene con un mensaje concreto.
+
 
 La biblioteca de personajes, el selector por escena y la generación de imágenes Qwen
 con referencias ya están integrados. Cada escena guarda por separado el prompt de
