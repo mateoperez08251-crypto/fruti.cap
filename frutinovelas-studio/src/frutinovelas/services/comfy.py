@@ -12,6 +12,12 @@ import httpx
 from cryptography.fernet import Fernet
 
 from frutinovelas.config import get_settings
+from frutinovelas.services.audio_workflow import (
+    AudioWorkflowError,
+    add_audio_guides,
+    validate_audio_graph,
+    validate_audio_node_info,
+)
 
 WORKFLOW = "H3_USUARIO_INICIO_FINAL.api.json"
 
@@ -140,8 +146,42 @@ class ComfyClient:
             ).json()
         return ((data.get("subfolder") + "/") if data.get("subfolder") else "") + data["name"]
 
+    def check_audio_support(self, graph):
+        validate_audio_graph(graph)
+        for class_type in ("LoadAudio", "MiniMaxH3AddGuide"):
+            try:
+                info = self.get("/object_info/" + class_type)
+            except ComfyError as exc:
+                if exc.status_code in (400, 404, 422):
+                    raise AudioWorkflowError(
+                        f"El servidor no ofrece {class_type}. Actualiza el kit remoto y comprueba la conexión. "
+                        "No se ha enviado la generación."
+                    ) from exc
+                raise
+            validate_audio_node_info(class_type, info)
 
-def prepare_graph(graph, prompt, duration, seed, start, end, job_id):
+    def upload_audio(self, path, filename):
+        # ComfyUI uses /upload/image and the multipart field `image` for audio
+        # too. The gateway already permits this authenticated native route.
+        with path.open("rb") as stream:
+            response = self.request(
+                "POST",
+                "/upload/image",
+                files={"image": (filename, stream, "audio/wav")},
+                data={"type": "input", "overwrite": "true"},
+            )
+        try:
+            data = response.json()
+            name = data.get("name") if isinstance(data, dict) else None
+            folder = data.get("subfolder", "") if isinstance(data, dict) else None
+            if not isinstance(name, str) or not name or not isinstance(folder, str):
+                raise ValueError("invalid upload response")
+        except ValueError as exc:
+            raise AudioWorkflowError("ComfyUI no confirmó el archivo de audio subido. No se envió la generación.") from exc
+        return (folder + "/" if folder else "") + name
+
+
+def prepare_graph(graph, prompt, duration, seed, start, end, job_id, *, audio_guides=None, audio_names=None):
     validate_workflow(graph)
     g = copy.deepcopy(graph)
     g["1"]["inputs"]["image"] = start
@@ -154,4 +194,5 @@ def prepare_graph(graph, prompt, duration, seed, start, end, job_id):
     g["12"]["inputs"]["noise_seed"] = seed
     g["28"]["inputs"]["value"] = duration
     g["20"]["inputs"]["filename_prefix"] = "FRUTINOVELAS/" + job_id
+    add_audio_guides(g, [] if audio_guides is None else audio_guides, [] if audio_names is None else audio_names, duration)
     return g

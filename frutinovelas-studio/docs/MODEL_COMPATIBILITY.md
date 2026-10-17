@@ -27,6 +27,19 @@ remota y sus archivos antes de atribuir un resultado a un perfil.
 - El encoder Qwen3-VL de H3 no es un chatbot de planificación al que el programa haga preguntas.
   El nuevo compilador organiza instrucciones ya redactadas; no es H3-Context-IR.
 
+## Audio guía por escena
+
+La aplicación puede ampliar la copia de trabajo del flujo H3 con `LoadAudio` y
+`MiniMaxH3AddGuide`, disponibles en el commit de ComfyUI fijado por el kit.
+Cada guía recibe el audio VAE existente y un tiempo de inicio; su condicionamiento
+alimenta `BasicGuider`. Se consultan los nodos del servidor antes de enviar una
+inferencia con audio. Los modelos y parámetros del perfil se conservan.
+
+Esto admite audios de diálogo proporcionados para la escena. No agrega Ref2VA,
+clonación automática de voz ni un motor TTS. El prompt literal se conserva, y las
+indicaciones temporales del hablante forman parte del prompt efectivo del trabajo.
+Ver [Voces y audios](AUDIO_Y_VOCES.md) para el contrato y la fuente primaria.
+
 ## Duración real
 
 El código existente y el compilador aplican:

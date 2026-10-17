@@ -34,6 +34,7 @@ export type Asset = {
   mime: string
   width: number | null
   height: number | null
+  duration_seconds?: number | null
   original_name: string
   created_at: string
 }
@@ -58,14 +59,17 @@ export type SceneParameters = {
   image_prompt?: string
   character_ids?: string[]
   cast?: CharacterReference[]
+  audio_guides?: AudioGuide[]
   seed_mode?: 'random' | 'fixed'
   seed?: number | null
   [k: string]: unknown
 }
 
 export type CharacterReference = { character_id: string; name: string; description: string; asset_id: string; sha256: string }
-export type Character = { id: string; project_id: string; name: string; description: string; revision: number; archived: boolean; reference_asset: Asset }
-export type CharacterInput = { name: string; description: string; reference_asset_id: string }
+export type AudioGuideInput = { asset_id: string; character_id: string | null; start_seconds: number }
+export type AudioGuide = AudioGuideInput & { asset?: Asset; character_name?: string | null; voice_description?: string }
+export type Character = { id: string; project_id: string; name: string; description: string; revision: number; archived: boolean; reference_asset: Asset; voice_description?: string; voice_asset?: Asset | null }
+export type CharacterInput = { name: string; description: string; reference_asset_id: string; voice_description?: string; voice_asset_id?: string | null }
 export type ChapterRender = { id: string; chapter_id: string; state: string; error: string; scenes: { scene_id: string; title: string }[]; result_url: string | null }
 export type ImageGeneration = { id: string; scene_id: string; kind: 'image'; auto_finish_done?: boolean; approval_mode?: 'manual' | 'automatic'; state: Generation['state']; error: string;
   revision_number: number; seed: number; references: CharacterReference[]; result_asset_id: string | null; result_url: string | null; created_at: string }
@@ -218,6 +222,11 @@ export const api = {
     const fd = new FormData()
     fd.append('file', file)
     return request<Asset>('/assets', { method: 'POST', body: fd, signal })
+  },
+  uploadAudio: (file: File, signal?: AbortSignal) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return request<Asset>('/assets/audio', { method: 'POST', body: fd, signal })
   },
 }
 

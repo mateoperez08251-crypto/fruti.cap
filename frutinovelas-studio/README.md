@@ -81,6 +81,19 @@ segundos con trabajo activo (15 segundos si la recepción es incierta). El sonde
 periódico se pausa con la pestaña oculta y se actualiza al volver. Estas consultas
 no inician inferencias: la GPU se usa al solicitar una generación.
 
+## Voces y audios de las escenas
+
+La biblioteca permite guardar una descripción y una muestra de voz por personaje.
+En **Audio y voces** de la escena puedes subir el diálogo, asignar quién habla y
+elegir el segundo de inicio. Los audios se guardan con la revisión y entran como
+guía en el flujo H3 actual mediante `MiniMaxH3AddGuide`.
+
+Consulta [Voces y audio por escena](docs/AUDIO_Y_VOCES.md) para uso, formatos,
+compatibilidad y límites. La muestra del personaje no genera frases nuevas
+automáticamente; la calidad de voz y sincronización requiere revisar un clip real.
+La [explicación de autenticación](docs/AUTENTICACION.md) distingue la API local,
+MCP y el gateway, así como la configuración declarada y los controles implementados.
+
 ## Comprobar los cambios
 
 ```powershell

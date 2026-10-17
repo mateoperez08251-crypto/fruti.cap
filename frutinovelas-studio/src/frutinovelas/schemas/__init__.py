@@ -86,11 +86,22 @@ class AssetOut(ORM):
     mime: str
     width: int | None
     height: int | None
+    duration_seconds: float | None = None
     original_name: str
     created_at: datetime
 
 
 # --------------------------------------------------------------------------- escenas
+
+
+class SceneAudioGuide(BaseModel):
+    """Only IDs and timing come from clients; the server supplies frozen metadata."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    asset_id: str = Field(min_length=1, max_length=36)
+    character_id: str | None = Field(default=None, min_length=1, max_length=36)
+    start_seconds: float = Field(default=0.0, ge=0, le=MAX_DURATION, allow_inf_nan=False)
 
 
 class SceneParameters(BaseModel):
@@ -101,6 +112,7 @@ class SceneParameters(BaseModel):
     character_ids: list[str] = Field(default_factory=list, max_length=2)
     image_prompt: str = Field(default="", max_length=30000)
     image_approval: Literal["manual", "automatic"] = "manual"
+    audio_guides: list[SceneAudioGuide] = Field(default_factory=list, max_length=8)
 
 
 class SceneCreate(BaseModel):
@@ -108,7 +120,7 @@ class SceneCreate(BaseModel):
     description: str = ""
     external_key: str | None = Field(default=None, max_length=64)
     prompt: str = ""
-    duration_seconds: float = Field(default=5.0, ge=MIN_DURATION, le=MAX_DURATION)
+    duration_seconds: float = Field(default=5.0, ge=MIN_DURATION, le=MAX_DURATION, allow_inf_nan=False)
     start_asset_id: str | None = None
     end_asset_id: str | None = None
     parameters: SceneParameters = Field(default_factory=SceneParameters)
@@ -121,7 +133,7 @@ class SceneUpdate(BaseModel):
     title: str | None = Field(default=None, max_length=200)
     description: str | None = None
     prompt: str | None = None
-    duration_seconds: float | None = Field(default=None, ge=MIN_DURATION, le=MAX_DURATION)
+    duration_seconds: float | None = Field(default=None, ge=MIN_DURATION, le=MAX_DURATION, allow_inf_nan=False)
     start_asset_id: str | None = None
     end_asset_id: str | None = None
     parameters: SceneParameters | None = None

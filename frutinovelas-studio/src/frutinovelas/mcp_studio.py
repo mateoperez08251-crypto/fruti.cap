@@ -10,6 +10,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ImageContent, TextContent, ToolAnnotations
 
 from frutinovelas.config import get_settings
+from frutinovelas.schemas import SceneAudioGuide
 
 
 def _id(value):
@@ -70,7 +71,7 @@ def register_studio_tools(server):
 
     @server.tool(annotations=read)
     def list_project_characters(project_id: str) -> list[dict]:
-        """Biblioteca del proyecto, nombres y asset_id de cada referencia real."""
+        """Biblioteca del proyecto, referencias visuales y voces guardadas. Una muestra de voz no se inserta automáticamente como diálogo."""
         return studio_request("GET", f"projects/{_id(project_id)}/characters")
 
     @server.tool(annotations=read)
@@ -105,8 +106,9 @@ def register_studio_tools(server):
         character_ids: list[str] | None = None,
         duration_seconds: float | None = None,
         image_approval: Literal["manual", "automatic"] | None = None,
+        audio_guides: list[SceneAudioGuide] | None = None,
     ) -> dict:
-        """Guardar prompts, reparto y duración estimada (4–15 s) según guion e imágenes de inicio/final inspeccionadas. El usuario también puede ajustar segundos manualmente. No genera ni entrena el modelo; automatic solo bajo petición explícita del usuario."""
+        """Guardar prompts, reparto, duración (4–15 s) y audios de diálogo ya subidos. audio_guides usa asset_id, character_id opcional y start_seconds; omitir conserva los audios y [] los quita. No clona voces ni genera; automatic solo bajo petición explícita del usuario."""
         scene = studio_request("GET", f"scenes/{_id(scene_id)}")
         if scene["revision"] != expected_revision:
             raise ToolError("La escena cambió. Vuelve a leerla antes de guardar.")
@@ -115,7 +117,12 @@ def register_studio_tools(server):
             if not 4 <= duration_seconds <= 15:
                 raise ToolError("Este perfil admite entre 4 y 15 segundos por clip.")
             body["duration_seconds"] = duration_seconds
-        if image_prompt is not None or character_ids is not None or image_approval is not None:
+        if (
+            image_prompt is not None
+            or character_ids is not None
+            or image_approval is not None
+            or audio_guides is not None
+        ):
             parameters = dict(scene["parameters"])
             if image_prompt is not None:
                 parameters["image_prompt"] = image_prompt
@@ -123,6 +130,8 @@ def register_studio_tools(server):
                 parameters["character_ids"] = character_ids
             if image_approval is not None:
                 parameters["image_approval"] = image_approval
+            if audio_guides is not None:
+                parameters["audio_guides"] = [guide.model_dump() for guide in audio_guides]
             body["parameters"] = parameters
         if animation_prompt is not None:
             body["prompt"] = animation_prompt

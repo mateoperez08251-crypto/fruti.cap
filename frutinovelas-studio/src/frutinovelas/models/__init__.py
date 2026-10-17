@@ -94,6 +94,7 @@ class Asset(Base):
     mime: Mapped[str] = mapped_column(String(64))
     width: Mapped[int | None] = mapped_column(Integer, nullable=True)
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     original_name: Mapped[str] = mapped_column(String(300), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -130,10 +131,13 @@ class Character(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text, default="")
     reference_asset_id: Mapped[str] = mapped_column(ForeignKey("assets.id"))
+    voice_description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    voice_asset_id: Mapped[str | None] = mapped_column(ForeignKey("assets.id"), nullable=True)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     revision: Mapped[int] = mapped_column(Integer, default=1)
     __mapper_args__ = {"version_id_col": revision, "version_id_generator": False}
-    reference_asset: Mapped[Asset] = relationship()
+    reference_asset: Mapped[Asset] = relationship(foreign_keys=[reference_asset_id])
+    voice_asset: Mapped[Asset | None] = relationship(foreign_keys=[voice_asset_id])
 
 
 class SceneRevision(Base):

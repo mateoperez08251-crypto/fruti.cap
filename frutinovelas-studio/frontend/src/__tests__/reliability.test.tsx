@@ -4,7 +4,8 @@ import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-
 import { afterEach, expect, test, vi } from 'vitest'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import App from '../App'
-import { api, type Asset, type Chapter, type Character, type Generation, type ImageGeneration, type Project, type Scene } from '../api'
+import { api, ApiError, type Asset, type Chapter, type Character, type Generation, type ImageGeneration, type Project, type Scene } from '../api'
+import { audioDrafts, audioErrors } from '../audio'
 import { ToastProvider } from '../components/Toast'
 
 const asset: Asset = { id: 'a1', kind: 'image', sha256: 'abc', size_bytes: 1, mime: 'image/png', width: 576, height: 1024, original_name: 'start.png', created_at: '2026-01-01' }
@@ -376,4 +377,217 @@ test('chapter generation requires explicit automatic approval and the saved revi
   fireEvent.click(button)
   await waitFor(() => expect(generate).toHaveBeenCalledOnce())
   expect(generate).toHaveBeenCalledWith('c1', 1, { s1: 1, s2: 1 }, expect.any(String))
+})
+
+const dialogue: Asset = { ...asset, id: 'audio-1', kind: 'audio', mime: 'audio/wav', width: null, height: null, duration_seconds: 2, original_name: 'dialogo.wav' }
+const guide = (start = 0, characterId: string | null = null) => ({ asset_id: dialogue.id, asset: dialogue, character_id: characterId, character_name: characterId ? 'Cocardo' : null, voice_description: characterId ? 'Voz grave, ritmo pausado.' : '', start_seconds: start })
+const audioFile = () => new File(['wave'], 'dialogo.wav', { type: 'audio/wav' })
+
+async function openAudioPreparation() {
+  const details = screen.getByText(/^3 · Audio y voces/).closest('details')!
+  details.open = true
+  fireEvent(details, new Event('toggle'))
+  await screen.findByLabelText('Diálogo de la escena')
+}
+
+test('scene dialogue uses the audio endpoint, allows an offscreen character and saves only explicit clips', async () => {
+  const prepared = { ...originals[0], parameters: { character_ids: ['character-0', 'character-1'], custom_setting: 'conservar' } }
+  const upload = vi.fn<typeof api.uploadAudio>(async () => dialogue)
+  const update = vi.fn<typeof api.updateScene>(async (_id, data) => ({ ...prepared, revision: 2, revision_number: 2, parameters: { ...data.parameters as Scene['parameters'], audio_guides: [guide(1, 'character-2')] } }))
+  const generate = vi.fn<typeof api.generateScene>()
+  const cast = characters.map((c) => ({ ...c, voice_asset: { ...dialogue, id: `sample-${c.id}` }, voice_description: 'Voz grave, ritmo pausado.' }))
+  setup({ scenes: async () => [prepared, originals[1]], characters: async () => cast, uploadAudio: upload, updateScene: update, generateScene: generate })
+  await screen.findByDisplayValue('Original uno')
+  await openAudioPreparation()
+  expect(document.querySelectorAll('audio')).toHaveLength(0)
+  expect(control('btn-save-scene').disabled).toBe(true)
+  fireEvent.change(control('scene-audio-upload-file'), { target: { files: [audioFile()] } })
+  await screen.findByLabelText('Personaje del audio 1')
+  await screen.findByRole('option', { name: 'Cocardo' })
+  edit('scene-audio-character-0', 'character-2')
+  edit('scene-audio-start-0', '1')
+  await waitFor(() => expect(control('btn-save-scene').disabled).toBe(false))
+  click('btn-save-scene')
+  await waitFor(() => expect(update).toHaveBeenCalledOnce())
+  expect(upload).toHaveBeenCalledWith(expect.any(File), expect.any(AbortSignal))
+  expect(update.mock.calls[0][1]).toMatchObject({ expected_revision: 1, parameters: {
+    character_ids: ['character-0', 'character-1'], custom_setting: 'conservar',
+    audio_guides: [{ asset_id: dialogue.id, character_id: 'character-2', start_seconds: 1 }],
+  } })
+  expect((update.mock.calls[0][1].parameters as Scene['parameters']).audio_guides?.[0].asset).toBeUndefined()
+  expect(update.mock.calls[0][1].prompt).toBeUndefined()
+  expect(document.querySelector('audio')?.preload).toBe('none')
+  expect(generate).not.toHaveBeenCalled()
+})
+
+test('an audio save retains timing edits made while pending and preserves the base revision on external changes', async () => {
+  const initial = { ...originals[0], parameters: { audio_guides: [guide()] } }
+  const pending = deferred<Scene>()
+  const update = vi.fn<typeof api.updateScene>(() => pending.promise)
+  setup({ scenes: async () => [initial, originals[1]], updateScene: update })
+  await screen.findByDisplayValue('Original uno')
+  await openAudioPreparation()
+  edit('scene-audio-start-0', '0,5')
+  click('tab-guion')
+  expect(control('scene-audio-start-0').value).toBe('0,5')
+  act(() => qc.setQueryData(['scenes', 'c1'], [{ ...initial, revision: 2, revision_number: 2, prompt: 'Cambio externo' }, originals[1]]))
+  click('btn-save-scene')
+  await waitFor(() => expect(update).toHaveBeenCalledOnce())
+  expect(update.mock.calls[0][1].expected_revision).toBe(1)
+  edit('scene-audio-start-0', '1')
+  await act(async () => pending.resolve({ ...initial, revision: 3, revision_number: 3, parameters: { audio_guides: [guide(0.5)] } }))
+  expect(control('scene-audio-start-0').value).toBe('1')
+  await waitFor(() => expect(control('btn-save-scene').disabled).toBe(false))
+  click('btn-save-scene')
+  await waitFor(() => expect(update).toHaveBeenCalledTimes(2))
+  expect(update.mock.calls[1][1]).toMatchObject({ expected_revision: 3, parameters: { audio_guides: [{ asset_id: dialogue.id, character_id: null, start_seconds: 1 }] } })
+})
+
+test('overlapping dialogue and clips outside the scene produce actionable errors and block saving', async () => {
+  const initial = { ...originals[0], parameters: { audio_guides: [guide(), guide(2)] } }
+  setup({ scenes: async () => [initial, originals[1]] })
+  await screen.findByDisplayValue('Original uno')
+  await openAudioPreparation()
+  edit('scene-audio-start-1', '1,5')
+  expect(screen.getByText(/Los audios 1 y 2 se superponen/)).toBeTruthy()
+  expect(control('btn-save-scene').disabled).toBe(true)
+  edit('scene-audio-start-1', '4')
+  expect(screen.getByText(/termina en 6 s y la escena dura 5 s/)).toBeTruthy()
+  expect(control('btn-save-scene').disabled).toBe(true)
+  edit('scene-duration', '6')
+  expect(control('btn-save-scene').disabled).toBe(false)
+  edit('scene-audio-start-0', '')
+  expect(screen.getByText(/introduce un inicio de 0 segundos o más/)).toBeTruthy()
+  expect(control('btn-save-scene').disabled).toBe(true)
+})
+
+test('audio timing accepts the same half-frame boundary as the server', () => {
+  const halfFrame = [{ ...guide(1 / 48), asset: { ...dialogue, duration_seconds: 4 } }]
+  expect(audioErrors(audioDrafts(halfFrame), 4)).toEqual([])
+  expect(audioErrors(audioDrafts([{ ...halfFrame[0], start_seconds: 3 / 48 }]), 4)).toHaveLength(1)
+})
+
+test('a saved dialogue displays its frozen speaker name and voice after library changes', async () => {
+  const initial = { ...originals[0], parameters: { audio_guides: [guide(0, 'character-2')] } }
+  const renamed = characters.map((c) => c.id === 'character-2' ? { ...c, name: 'Cocardo actualizado', voice_description: 'Otra voz' } : c)
+  setup({ scenes: async () => [initial, originals[1]], characters: async () => renamed })
+  await screen.findByDisplayValue('Original uno')
+  await openAudioPreparation()
+  await screen.findByRole('option', { name: 'Cocardo · guardado' })
+  const selected = document.getElementById('scene-audio-character-0') as HTMLSelectElement
+  expect(selected.selectedOptions[0].textContent).toBe('Cocardo · guardado')
+  expect(screen.getByText('Voz: Voz grave, ritmo pausado.')).toBeTruthy()
+  edit('scene-audio-start-0', '1')
+  expect(selected.value).toBe('character-2')
+  expect(selected.selectedOptions[0].textContent).toBe('Cocardo · guardado')
+})
+
+test('a failed audio upload preserves the prompt and lets the same file be retried', async () => {
+  const upload = vi.fn<typeof api.uploadAudio>()
+    .mockRejectedValueOnce(new ApiError(400, 'El audio supera los 15 segundos. Recórtalo y vuelve a subirlo.'))
+    .mockResolvedValue(dialogue)
+  setup({ uploadAudio: upload })
+  await screen.findByDisplayValue('Original uno')
+  edit('scene-prompt', 'Diálogo literal: ¡Sí, mamá!')
+  await openAudioPreparation()
+  const file = audioFile()
+  fireEvent.change(control('scene-audio-upload-file'), { target: { files: [file] } })
+  await screen.findByText('El audio supera los 15 segundos. Recórtalo y vuelve a subirlo.')
+  expect(control('scene-prompt').value).toBe('Diálogo literal: ¡Sí, mamá!')
+  expect(document.querySelectorAll('.scene-audio-item')).toHaveLength(0)
+  fireEvent.change(control('scene-audio-upload-file'), { target: { files: [file] } })
+  await screen.findByLabelText('Personaje del audio 1')
+  expect(upload).toHaveBeenCalledTimes(2)
+  expect(screen.queryByText('El audio supera los 15 segundos. Recórtalo y vuelve a subirlo.')).toBeNull()
+  expect(control('scene-prompt').value).toBe('Diálogo literal: ¡Sí, mamá!')
+})
+
+test('pending audio protects navigation and a late upload never attaches to a different scene', async () => {
+  const pending = deferred<Asset>()
+  const upload = vi.fn<typeof api.uploadAudio>(() => pending.promise)
+  setup({ uploadAudio: upload })
+  await screen.findByDisplayValue('Original uno')
+  await openAudioPreparation()
+  fireEvent.change(control('scene-audio-upload-file'), { target: { files: [audioFile()] } })
+  await waitFor(() => expect(upload).toHaveBeenCalledOnce())
+  click('tab-guion')
+  expect(control('scene-prompt').value).toBe('Original uno')
+  expect(control('btn-save-scene').disabled).toBe(true)
+  vi.mocked(window.confirm).mockReturnValue(true)
+  await act(async () => { await router.navigate('/capitulos/c1?escena=s2') })
+  await screen.findByDisplayValue('Original dos')
+  expect(upload.mock.calls[0][1]?.aborted).toBe(true)
+  await act(async () => pending.resolve(dialogue))
+  expect(document.querySelectorAll('.scene-audio-item')).toHaveLength(0)
+})
+
+test('removing a saved audio clip sends an explicit empty list and keeps other scene parameters', async () => {
+  const initial = { ...originals[0], parameters: { audio_guides: [guide()], image_prompt: 'Imagen literal', custom_setting: 'conservar' } }
+  const update = vi.fn<typeof api.updateScene>(async (_id, data) => ({ ...initial, revision: 2, revision_number: 2, parameters: data.parameters as Scene['parameters'] }))
+  setup({ scenes: async () => [initial, originals[1]], updateScene: update })
+  await screen.findByDisplayValue('Original uno')
+  await openAudioPreparation()
+  fireEvent.click(screen.getByLabelText('Quitar audio 1'))
+  click('btn-save-scene')
+  await waitFor(() => expect(update).toHaveBeenCalledOnce())
+  expect(update.mock.calls[0][1].parameters).toMatchObject({ audio_guides: [], image_prompt: 'Imagen literal', custom_setting: 'conservar' })
+})
+
+test('editing a character preserves its saved voice until explicitly removed', async () => {
+  const voiced = { ...characters[0], voice_description: 'Voz cálida, acento peruano.', voice_asset: dialogue }
+  const update = vi.fn<typeof api.updateCharacter>(async () => voiced)
+  setup({ characters: async () => [voiced], updateCharacter: update })
+  await screen.findByDisplayValue('Original uno')
+  await act(async () => { await router.navigate('/proyectos/p1') })
+  const details = screen.getByText('Biblioteca de personajes · referencias para las escenas').closest('details')!
+  details.open = true
+  fireEvent(details, new Event('toggle'))
+  fireEvent.click(await screen.findByRole('button', { name: /Darío/ }))
+  expect(control('character-voice-description').value).toBe('Voz cálida, acento peruano.')
+  expect(document.querySelector('#character-voice audio')?.getAttribute('src')).toContain('/assets/audio-1/content')
+  edit('character-description', 'Rasgos visuales actualizados')
+  fireEvent.click(screen.getByText('Guardar personaje'))
+  await waitFor(() => expect(update).toHaveBeenCalledOnce())
+  expect(update.mock.calls[0][1]).not.toHaveProperty('voice_asset_id')
+  expect(update.mock.calls[0][1]).not.toHaveProperty('voice_description')
+  await waitFor(() => expect(control('character-name').value).toBe(''))
+  fireEvent.click(screen.getByRole('button', { name: /Darío/ }))
+  fireEvent.click(screen.getByLabelText('Quitar muestra de voz del personaje'))
+  fireEvent.click(screen.getByText('Guardar personaje'))
+  await waitFor(() => expect(update).toHaveBeenCalledTimes(2))
+  expect(update.mock.calls[1][1]).toMatchObject({ expected_revision: 1, voice_asset_id: null })
+  expect(update.mock.calls[1][1]).not.toHaveProperty('voice_description')
+})
+
+test('a character sample and voice description are saved together after the upload completes', async () => {
+  const pending = deferred<Asset>()
+  const upload = vi.fn<typeof api.uploadAudio>(() => pending.promise)
+  const update = vi.fn<typeof api.updateCharacter>(async () => ({ ...characters[0], voice_asset: dialogue, voice_description: 'Voz propia y pausada.' }))
+  setup({ characters: async () => characters, uploadAudio: upload, updateCharacter: update })
+  await screen.findByDisplayValue('Original uno')
+  await act(async () => { await router.navigate('/proyectos/p1') })
+  const details = screen.getByText('Biblioteca de personajes · referencias para las escenas').closest('details')!
+  details.open = true
+  fireEvent(details, new Event('toggle'))
+  fireEvent.click(await screen.findByRole('button', { name: /Darío/ }))
+  edit('character-voice-description', 'Voz propia y pausada.')
+  fireEvent.change(control('character-voice-file'), { target: { files: [audioFile()] } })
+  await waitFor(() => expect(upload).toHaveBeenCalledOnce())
+  expect((screen.getByText('Guardar personaje') as HTMLButtonElement).disabled).toBe(true)
+  await act(async () => pending.resolve(dialogue))
+  await waitFor(() => expect((screen.getByText('Guardar personaje') as HTMLButtonElement).disabled).toBe(false))
+  expect(document.querySelector('#character-voice audio')?.getAttribute('preload')).toBe('none')
+  fireEvent.click(screen.getByText('Guardar personaje'))
+  await waitFor(() => expect(update).toHaveBeenCalledOnce())
+  expect(update.mock.calls[0][1]).toMatchObject({ expected_revision: 1, voice_description: 'Voz propia y pausada.', voice_asset_id: dialogue.id })
+})
+
+test('audio upload uses a multipart request to the dedicated asset route', async () => {
+  const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(dialogue), { status: 200 }))
+  const file = audioFile()
+  const controller = new AbortController()
+  expect(await api.uploadAudio(file, controller.signal)).toEqual(dialogue)
+  expect(fetcher).toHaveBeenCalledWith('/api/v1/assets/audio', { method: 'POST', body: expect.any(FormData), signal: controller.signal })
+  const form = fetcher.mock.calls[0][1]?.body as FormData
+  expect(form.get('file')).toEqual(file)
 })

@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from frutinovelas.models import ComfyConnection, GenerationJob, utcnow
 from frutinovelas.services import scenes
+from frutinovelas.services.audio_workflow import AudioWorkflowError, effective_audio_prompt, validate_audio_guides
 from frutinovelas.services.comfy import ComfyError, cipher
 
 ACTIVE = ("queued", "uploading", "submitting", "waiting", "running", "downloading", "unknown")
@@ -43,6 +44,12 @@ def enqueue(session, scene_id, expected_revision, request_id):
     if connection is None:
         raise ComfyError("Configura y comprueba la conexión con RunPod en «Conexión ComfyUI».")
     params = rev.parameters or {}
+    audio_guides = copy.deepcopy(params.get("audio_guides", []))
+    try:
+        validate_audio_guides(audio_guides, rev.duration_seconds)
+        effective_prompt = effective_audio_prompt(rev.prompt, audio_guides)
+    except AudioWorkflowError as exc:
+        raise ComfyError(str(exc)) from exc
     seed = params.get("seed") if params.get("seed_mode") == "fixed" else secrets.randbelow(2**53)
     if type(seed) is not int or not 0 <= seed < 2**53:
         raise ComfyError("La semilla debe ser un entero entre 0 y 9007199254740991.")
@@ -50,6 +57,8 @@ def enqueue(session, scene_id, expected_revision, request_id):
         revision_number=rev.number,
         scene_revision=scene.revision,
         prompt=rev.prompt,
+        effective_prompt=effective_prompt,
+        audio_guides=audio_guides,
         start_asset_id=rev.start_asset_id,
         end_asset_id=rev.end_asset_id,
         duration=rev.duration_seconds,
