@@ -77,3 +77,7 @@ capítulo completo, preparar y guardar ambos prompts y duraciones primero; despu
 `request_chapter_render` requiere aprobación automática expresa para ese proceso.
 La cola no consulta a ChatGPT para reescribir prompts o recalcular tiempos durante
 la inferencia. Unir clips no garantiza continuidad visual ni sonora perfecta.
+
+## Imágenes generadas fuera de Studio
+
+Si el cliente realmente tiene acceso a los bytes de una imagen ya creada, puede usar `import_studio_image` con base64 o un enlace HTTPS público permitido. Inspecciona el asset devuelto con `inspect_studio_image` y asigna como inicio o final con `set_studio_scene_frame` **solo bajo petición expresa y usando la revisión actual**. Importar no aprueba, anima ni consume GPU. Los archivos temporales del chatbot no existen en la PC de Studio: consulta [Importar imágenes por MCP](IMPORTAR_IMAGENES_MCP.md).
