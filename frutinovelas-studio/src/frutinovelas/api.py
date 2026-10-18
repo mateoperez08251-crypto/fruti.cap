@@ -90,6 +90,8 @@ npm run build</pre>
 async def lifespan(_app: FastAPI):
     settings = get_settings()
     upgrade_to_head()
+    from frutinovelas.services.narrated import recover_interrupted
+    recover_interrupted()
     log.info("Datos en %s", settings.resolved_data_dir)
     worker = GenerationWorker()
     if settings.embedded_worker:
