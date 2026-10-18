@@ -210,3 +210,36 @@ def content(id:str,session:Session=Depends(get_session)):
     if base not in path.parents or not path.is_file():
         raise HTTPException(404,"Archivo de video no disponible.")
     return FileResponse(path,media_type="video/mp4",filename=path.name)
+
+
+@router.delete("/narrated-videos/{id}/output")
+def delete_output(id: str, session: Session = Depends(get_session)):
+    """Delete only the completed local and remote export, preserving audio and shots."""
+    row = _get(session, id)
+    if row.state in ("queued", "rendering"):
+        raise HTTPException(409, "No puedes eliminar un video mientras se exporta.")
+    from frutinovelas.models import ComfyConnection
+    from frutinovelas.services.comfy import ComfyClient, ComfyError
+    from frutinovelas.services.generation import connection_token
+
+    connection = session.get(ComfyConnection, "default")
+    if connection:
+        client = ComfyClient(connection.url, connection_token(connection))
+        try:
+            client.request("DELETE", f"/frutinovelas/narration/jobs/{row.id}")
+        except (ComfyError, OSError) as exc:
+            raise HTTPException(503, "No se pudo comprobar la eliminación remota. Reintenta con RunPod/Colab conectado.") from exc
+        finally:
+            client.close()
+    if row.result_path:
+        base = get_settings().resolved_data_dir
+        path = (base / row.result_path).resolve()
+        if base not in path.parents:
+            raise HTTPException(422, "Ruta no válida.")
+        path.unlink(missing_ok=True)
+    row.result_path = None
+    row.state = "draft"
+    row.error = ""
+    row.progress = 0
+    session.commit()
+    return _out(session, row)
