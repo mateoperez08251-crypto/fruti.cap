@@ -1,7 +1,7 @@
 {
   "formato": "frutinovelas.conexion_comfyui",
   "version": 1,
-  "comfyui_url": "https://separation-road-centuries-way.trycloudflare.com",
+  "comfyui_url": "https://shadows-mailto-and-guys.trycloudflare.com",
   "autenticacion": "Authorization: Bearer <token>",
   "token": "NO INCLUIDO: cópialo desde la celda 9B y pégalo en el programa",
   "plataforma": "colab",
@@ -19,6 +19,6 @@
     "perfil_video": "h3_balanced_default",
     "workflow_ui_sha256": "2153a2f6d289aaeb38882c4eb364a06ef3b039ad93addc4347b0473340c9e547"
   },
-  "creado": "2026-10-18T00:37:26Z",
+  "creado": "2026-10-18T02:59:17Z",
   "aviso": "La URL de un Quick Tunnel cambia en cada sesión."
 }
