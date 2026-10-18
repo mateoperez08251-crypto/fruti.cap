@@ -60,7 +60,7 @@ export function ChapterImagesGallery({ scenes }: Props) {
               <p className="hint">{scene.start_asset ? 'Escena con imagen inicial asignada' : 'Generada · pendiente de aprobación'}</p>
               {!scene.start_asset && <button className="btn btn-sm"
                 disabled={approve.isPending}
-                onClick={() => approve.mutate({ scene, jobId: imageJob.id })}>Aprobar y usar de inicio</button>}
+                onClick={() => approve.mutate({ scene, jobId: imageJob.id })}>Aprobar imagen desde galería</button>}
             </> : <p className="hint">{query?.isError ? 'Error al leer resultado · vuelve a abrir la galería'
               : latest?.state === 'failed' ? `Generación fallida: ${latest.error || 'sin detalle'}`
               : latest ? 'Generando o en cola' : query?.isPending ? 'Cargando…' : 'Sin generación'}</p>}
