@@ -83,7 +83,7 @@ def register_studio_tools(server):
     ) -> dict:
         """Guardar tomas sincronizadas con un audio ya subido (hasta 5 min).
         Cada toma incluye start_seconds, end_seconds, text, image_prompt,
-        image_asset_id (opcional) y motion (zoom_in/zoom_out/pan_left/pan_right/still).
+        image_asset_id (opcional), animation_prompt y motion (zoom_in/zoom_out/pan_left/pan_right/still).
         No ejecuta GPU ni exporta. Utiliza IDs de imágenes registrados en Studio.
         El conjunto debe cubrir la duración completa del audio sin huecos.
         """
