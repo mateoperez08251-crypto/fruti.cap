@@ -9,7 +9,7 @@ const labels: Record<NarratedShot['motion'], string> = {
 }
 const time = (n: number) => n.toFixed(2)
 const blank = (start: number, end: number): NarratedShot => ({
-  start_seconds: start, end_seconds: end, text: '', image_prompt: '', image_asset_id: null, motion: 'zoom_in',
+  start_seconds: start, end_seconds: end, text: '', image_prompt: '', animation_prompt: '', image_asset_id: null, motion: 'zoom_in',
 })
 
 export function NarratedPage() {
@@ -130,7 +130,8 @@ export function NarratedPage() {
         </div>
         {s.image_asset_id && <img className="narration-image" src={assetUrl(s.image_asset_id)} alt={'Imagen de la toma '+(i+1)}/>}
         <label className="narration-field">Qué se cuenta<textarea rows={2} value={s.text} onChange={e=>changeShot(i,{text:e.target.value})}/></label>
-        <label className="narration-field">Prompt visual<textarea rows={3} value={s.image_prompt} onChange={e=>changeShot(i,{image_prompt:e.target.value})}/></label>
+        <label className="narration-field">Prompt de imagen (ChatGPT)<textarea rows={3} value={s.image_prompt} onChange={e=>changeShot(i,{image_prompt:e.target.value})}/></label>
+        <label className="narration-field">Prompt de animación / movimiento (ChatGPT)<textarea rows={3} value={s.animation_prompt || ""} onChange={e=>changeShot(i,{animation_prompt:e.target.value})}/></label>
       </article>)}</div>
       {draft.state==='rendering'||draft.state==='queued' ? <p role="status">Exportando: {draft.progress}%</p> : null}
       {draft.error && <p className="generation-error" role="alert">{draft.error}</p>}
