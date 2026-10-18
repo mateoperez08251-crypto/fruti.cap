@@ -239,3 +239,13 @@ sus IDs. **La URL pública de prueba sin autenticación da acceso a terceros que
 conozcan el enlace y permite modificar escenas y usar la GPU.** Usar solamente
 con proyectos descartables y cerrar el túnel al terminar.
 Después de actualizar, reinicia MCP y renueva la conexión del plugin de ChatGPT.
+
+### Galería de imágenes del capítulo
+
+La pestaña **Escenas** muestra una **Galería de imágenes Qwen** del capítulo
+con miniaturas de las imágenes terminadas, incluso si la aprobación es manual
+y todavía no se han asignado como fotograma inicial. Desde la galería puedes
+abrir la imagen a tamaño completo y **Aprobar y usar de inicio** individualmente.
+Sin aprobación, la escena continúa mostrando `sin_imagen` aunque Qwen haya
+terminado correctamente. Se consultan resultados de la API existente: la
+vista no duplica archivos ni genera nada por sí sola.

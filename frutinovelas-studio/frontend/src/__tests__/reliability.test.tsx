@@ -295,15 +295,14 @@ test('scene references and the image prompt save separately from the animation p
   expect(generate).not.toHaveBeenCalled()
 })
 
-test('image history is read only when its preparation panel is opened', async () => {
+test('chapter image gallery preloads results, but character references load only when the preparation panel opens', async () => {
   const images = vi.fn<typeof api.imageGenerations>(async () => [])
   const refs = vi.fn<typeof api.characters>(async () => characters)
   setup({ imageGenerations: images, characters: refs })
   await screen.findByDisplayValue('Original uno')
-  expect(images).not.toHaveBeenCalled()
+  await waitFor(() => expect(images).toHaveBeenCalledTimes(2))
   expect(refs).not.toHaveBeenCalled()
   await openImagePreparation()
-  await waitFor(() => expect(images).toHaveBeenCalledOnce())
   expect(refs).toHaveBeenCalledOnce()
 })
 
