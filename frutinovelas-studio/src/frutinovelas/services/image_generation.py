@@ -73,6 +73,7 @@ def prepare_image_graph(graph, prompt, cast, seed, names, job_id):
     # The editor's literal prompt is preserved. Add deterministic, enforceable-looking
     # cast constraints only to the effective graph submitted to Qwen.
     positive = prompt + cast_contract(cast)
+    if edit:
         # Bind actual image tensors to both encoders; never leave template sample images attached.
         for i, name in enumerate(names, 1):
             id = f"fruti_reference_{i}"
