@@ -10,6 +10,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ImageContent, TextContent, ToolAnnotations
 
 from frutinovelas.config import get_settings
+from frutinovelas.mcp_chapters import register_chapter_tools
 from frutinovelas.schemas import SceneAudioGuide
 
 
@@ -50,6 +51,8 @@ def register_studio_tools(server):
     write = ToolAnnotations(
         read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False
     )
+
+    register_chapter_tools(server, write, studio_request)
 
     @server.tool(annotations=read)
     def list_studio_projects() -> list[dict]:

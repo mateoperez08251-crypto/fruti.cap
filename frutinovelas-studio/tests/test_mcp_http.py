@@ -67,6 +67,7 @@ async def test_real_http_endpoint_tools_resources_and_dns_rebinding_protection()
                         "prepare_h3_prompt",
                         "prepare_image_prompt",
                         "review_h3_prompt",
+                        "create_studio_chapter_plan",
                         "list_studio_projects",
                         "list_studio_chapters",
                         "list_studio_scenes",

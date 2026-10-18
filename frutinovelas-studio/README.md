@@ -201,3 +201,18 @@ consola ofrece una URL HTTPS temporal para conectarla como servidor MCP remoto;
 no utiliza los permisos del túnel privado de OpenAI. La prueba es deliberadamente
 **sin autenticación** y expone herramientas de lectura, escritura y generación,
 por lo que solo se debe realizar con proyectos descartables y cerrar con Ctrl+C.
+
+### Crear capítulos completos desde ChatGPT por MCP
+
+El MCP incorpora `create_studio_chapter_plan`: crea un capítulo nuevo con guion,
+continuidad y escenas preparadas (prompt Qwen, prompt H3, reparto y duración de
+4–15 segundos por escena), utilizando IDs reales de la biblioteca y aprobación
+manual. No genera imágenes ni videos. Valida antes de escribir y permite repetir
+una llamada interrumpida sin duplicar las escenas, pero nunca sobrescribe un
+capítulo o escena que se haya editado en Studio. Reinicia el MCP después de
+actualizar para descubrir la nueva herramienta.
+
+El ejemplo de producción está en
+[`examples/chapters/dario_capitulo_2.json`](examples/chapters/dario_capitulo_2.json).
+No se importa de forma automática: hay que llamar a la herramienta MCP desde
+ChatGPT con el proyecto correcto y este plan. No afecta al capítulo 1.

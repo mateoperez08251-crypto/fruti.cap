@@ -1,0 +1,121 @@
+{
+  "project_id": "be3711fa-a4f4-45e5-8d62-9f822fe47002",
+  "plan_id": "dario-cap2-homicidio",
+  "chapter_title": "Capítulo 2 — La última visita",
+  "script_md": "# Capítulo 2 — La última visita\n\nDarío y Bruno llegan al patio de servicio donde se investiga un homicidio. El lugar parece extrañamente ordenado; la cámara del acceso principal está apagada y el registro de entradas contiene una hora aún sin corroborar. Mateo Rivas aparece afuera del perímetro y afirma que la víctima lo citó por mensaje. Su relato entra en tensión con un dato del registro, pero los detectives no lo declaran culpable ni desestiman que otra persona haya entrado. Bruno descubre una segunda entrada con marcas recientes; al final, Darío descubre una cámara vecina que puede aportar la prueba decisiva. El capítulo termina antes de revelar las imágenes.\n\nEsta es una **propuesta original**, no un hecho fijado por el Capítulo 1. La víctima permanece sin identificar por nombre y la investigación no atribuye culpabilidad.",
+  "continuity_md": "Personajes: Dario = detective pera con su ficha aprobada, Bruno = detective con su ficha aprobada, Mateo Rivas = sospechoso con su ficha aprobada. Ningún elemento prueba por sí solo la culpabilidad de Mateo. Lugar: patio de servicio de almacén, madrugada, sedan gris oscuro detenido afuera, cinta policial; coherencia de iluminación y puertas. Personajes visibles por imagen Qwen: máximo 2 referencias, respetar el encuadre y posiciones; mantener identidades reales según la biblioteca. Escenas 1-4 interior/exterior del perímetro; escena 5-6 Mateo permanece afuera y Darío adentro; escenas 7-8 pasaje lateral. Cámara principal de acceso apagada y cámara vecina funcional: no confundirlas. No tocar pruebas sin procedimiento; registro protegido por funda. Voz Ref2VA: seleccionada como máximo una muestra por clip ya que Dario 3.0s y Bruno 14.37s suman más de 15s; otras voces se describen para síntesis sin referencias hasta que existan muestras adecuadas. No música salvo solicitud; diálogos literales. Duraciones H3 entre 4 y 15 segundos. La historia no se publica ni genera automáticamente.",
+  "scenes": [
+    {
+      "title": "01 · El aviso en el perímetro",
+      "description": "Llegan al patio de servicio acordonado; la cinta y el patrullero anuncian la investigación.",
+      "duration_seconds": 6,
+      "character_ids": [
+        "151f8b4b-72ee-41df-9062-6651427da474",
+        "7a047d53-f53f-4519-b6f8-329eb86400b6"
+      ],
+      "voice_character_ids": [
+        "151f8b4b-72ee-41df-9062-6651427da474"
+      ],
+      "image_prompt": "Vertical 9:16; cinematic 3D anthropomorphic fruit noir thriller. Preserve the exact appearance, proportions, fruit texture and clothing from the supplied character-sheet reference(s), not an invented interpretation. Faithful consistent muted blue-green night palette, natural practical tungsten spill and cold street light, solid contact shadows, believable architecture and scale, anatomically coherent limbs and hands. Small municipal evidence-controlled service yard next to an old warehouse after midnight. Still frame BEFORE the key action; foreground and midground distinct, enough room for motion. No text, watermark, extra principal characters, graphic injury or exposed body. Exterior three-quarter view of a stationary charcoal-grey sedan at a police cordon; show approved detective pear Dario clearly outside passenger door and approved detective Bruno near driver door; their feet planted; neither has crossed the yellow barrier. One distant patrol vehicle, silent blue/red light behind. Dario's gaze fixed on a shuttered loading door while Bruno watches him.",
+      "animation_prompt": "integrated_multimodal_description:\n[Shot 1] Portrait 9:16; fixed cinematic camera, grounded 3D fruit-character noir; exactly the approved referenced character(s), same costumes, hands, facing directions, shadows, environment and physical props. The stationary car finishes settling, no new drive-in shot. Dario focuses on the warehouse entrance; Bruno shuts the driver-side door once, then pauses. Dario (S1) quietly says <d>[Spanish] Llegamos tarde. Que nadie entre hasta revisar el acceso.</d> Bruno listens and gives one short nod. Hold a beat on the sealed shutter. Actions and dialogue in their written order; listening characters keep lips still. Natural timing, no repeated movements, one dominant emotional arc. Realistic touch, weight and eye-lines.\noverall_soundscape:\nOne clean car door closure, small distant radio crackle, night air. No narrator.\nnon_diegetic_music:\nN/A"
+    },
+    {
+      "title": "02 · Una escena demasiado ordenada",
+      "description": "Observan marcas de arrastre bajo el acceso; Darío evita declarar una conclusión sin evidencia.",
+      "duration_seconds": 7,
+      "character_ids": [
+        "151f8b4b-72ee-41df-9062-6651427da474",
+        "7a047d53-f53f-4519-b6f8-329eb86400b6"
+      ],
+      "voice_character_ids": [
+        "151f8b4b-72ee-41df-9062-6651427da474"
+      ],
+      "image_prompt": "Vertical 9:16; cinematic 3D anthropomorphic fruit noir thriller. Preserve the exact appearance, proportions, fruit texture and clothing from the supplied character-sheet reference(s), not an invented interpretation. Faithful consistent muted blue-green night palette, natural practical tungsten spill and cold street light, solid contact shadows, believable architecture and scale, anatomically coherent limbs and hands. Small municipal evidence-controlled service yard next to an old warehouse after midnight. Still frame BEFORE the key action; foreground and midground distinct, enough room for motion. No text, watermark, extra principal characters, graphic injury or exposed body. Inside the secured warehouse service yard, both referenced detectives on the same side of a low police barrier, standing before a shutter with scuffed wet ground. A covered distant outline under a plain forensic sheet is partly obscured at the rear, respectful and non-graphic; near foreground a streak of disturbed dust and a displaced wooden crate. Dario slightly bent to inspect ground without touching it; Bruno keeps guard.",
+      "animation_prompt": "integrated_multimodal_description:\n[Shot 1] Portrait 9:16; fixed cinematic camera, grounded 3D fruit-character noir; exactly the approved referenced character(s), same costumes, hands, facing directions, shadows, environment and physical props. Dario crouches only enough to study the disturbed dust, tracking it with his eyes; he keeps both hands off all evidence. Bruno scans the covered form then the shutter. Bruno (S1) asks <d>[Spanish] ¿Crees que lo mataron aquí?</d> Dario (S2) responds <d>[Spanish] Aún no. Primero debemos saber qué se movió.</d> A quiet two-beat pause closes the shot. Actions and dialogue in their written order; listening characters keep lips still. Natural timing, no repeated movements, one dominant emotional arc. Realistic touch, weight and eye-lines.\noverall_soundscape:\nNight air, gentle wind, distant traffic and restrained police-radio noise. No narrator.\nnon_diegetic_music:\nN/A"
+    },
+    {
+      "title": "03 · La cámara apagada",
+      "description": "Descubren que una cámara mira al acceso pero su indicador está apagado.",
+      "duration_seconds": 6,
+      "character_ids": [
+        "151f8b4b-72ee-41df-9062-6651427da474",
+        "7a047d53-f53f-4519-b6f8-329eb86400b6"
+      ],
+      "voice_character_ids": [
+        "7a047d53-f53f-4519-b6f8-329eb86400b6"
+      ],
+      "image_prompt": "Vertical 9:16; cinematic 3D anthropomorphic fruit noir thriller. Preserve the exact appearance, proportions, fruit texture and clothing from the supplied character-sheet reference(s), not an invented interpretation. Faithful consistent muted blue-green night palette, natural practical tungsten spill and cold street light, solid contact shadows, believable architecture and scale, anatomically coherent limbs and hands. Small municipal evidence-controlled service yard next to an old warehouse after midnight. Still frame BEFORE the key action; foreground and midground distinct, enough room for motion. No text, watermark, extra principal characters, graphic injury or exposed body. Medium low-angle shot of the approved Bruno standing and pointing upward toward a single security camera over the warehouse service shutter. Dario, opposite frame, follows his gesture with eyes first; the camera's tiny indicator visibly dark, its cable continues along the wall. No invented digital display or labels.",
+      "animation_prompt": "integrated_multimodal_description:\n[Shot 1] Portrait 9:16; fixed cinematic camera, grounded 3D fruit-character noir; exactly the approved referenced character(s), same costumes, hands, facing directions, shadows, environment and physical props. Bruno slowly raises his index finger to indicate the unlit security camera above the door; Dario follows the gesture with eyes and a restrained head turn. Bruno (S1) says <d>[Spanish] Esa cámara no está grabando.</d> Dario gives a small concerned nod and studies the cable, silent. Hold one second on the dark indicator. Actions and dialogue in their written order; listening characters keep lips still. Natural timing, no repeated movements, one dominant emotional arc. Realistic touch, weight and eye-lines.\noverall_soundscape:\nNight air, gentle wind, distant traffic and restrained police-radio noise. No narrator.\nnon_diegetic_music:\nN/A"
+    },
+    {
+      "title": "04 · Un registro contradictorio",
+      "description": "Una hoja de control indica una visita previa; no confirma identidad ni culpabilidad.",
+      "duration_seconds": 7,
+      "character_ids": [
+        "151f8b4b-72ee-41df-9062-6651427da474",
+        "7a047d53-f53f-4519-b6f8-329eb86400b6"
+      ],
+      "voice_character_ids": [
+        "151f8b4b-72ee-41df-9062-6651427da474"
+      ],
+      "image_prompt": "Vertical 9:16; cinematic 3D anthropomorphic fruit noir thriller. Preserve the exact appearance, proportions, fruit texture and clothing from the supplied character-sheet reference(s), not an invented interpretation. Faithful consistent muted blue-green night palette, natural practical tungsten spill and cold street light, solid contact shadows, believable architecture and scale, anatomically coherent limbs and hands. Small municipal evidence-controlled service yard next to an old warehouse after midnight. Still frame BEFORE the key action; foreground and midground distinct, enough room for motion. No text, watermark, extra principal characters, graphic injury or exposed body. At a rain-sheltered desk inside the cordoned entrance, Dario and Bruno investigate a paper sign-in ledger placed behind a clear evidence sleeve. The page is deliberately illegible in the image; visible ink rows but no fake readable words. Dario points at a row without touching the paper. Bruno's face tense and thoughtful.",
+      "animation_prompt": "integrated_multimodal_description:\n[Shot 1] Portrait 9:16; fixed cinematic camera, grounded 3D fruit-character noir; exactly the approved referenced character(s), same costumes, hands, facing directions, shadows, environment and physical props. Dario places the clear evidence sleeve flat and indicates a single ledger row through the plastic; Bruno leans enough to inspect without reaching across. Dario (S1) says <d>[Spanish] Alguien entró antes del aviso. Falta comprobar quién firmó.</d> Bruno takes the finding in, lips closed. The paper stays flat and in one place. Actions and dialogue in their written order; listening characters keep lips still. Natural timing, no repeated movements, one dominant emotional arc. Realistic touch, weight and eye-lines.\noverall_soundscape:\nFaint sleeve rustle, distant police-radio noise, quiet drops on awning. No narrator.\nnon_diegetic_music:\nN/A"
+    },
+    {
+      "title": "05 · Mateo frente a la cinta",
+      "description": "Mateo llega preocupado y dice que recibió un mensaje pidiendo ayuda; aún no hay corroboración.",
+      "duration_seconds": 8,
+      "character_ids": [
+        "26b8ab88-57c4-4268-b713-400ef71b2cdc",
+        "151f8b4b-72ee-41df-9062-6651427da474"
+      ],
+      "voice_character_ids": [
+        "151f8b4b-72ee-41df-9062-6651427da474"
+      ],
+      "image_prompt": "Vertical 9:16; cinematic 3D anthropomorphic fruit noir thriller. Preserve the exact appearance, proportions, fruit texture and clothing from the supplied character-sheet reference(s), not an invented interpretation. Faithful consistent muted blue-green night palette, natural practical tungsten spill and cold street light, solid contact shadows, believable architecture and scale, anatomically coherent limbs and hands. Small municipal evidence-controlled service yard next to an old warehouse after midnight. Still frame BEFORE the key action; foreground and midground distinct, enough room for motion. No text, watermark, extra principal characters, graphic injury or exposed body. Approaching the perimeter from OUTSIDE, Mateo Rivas exactly matching his supplied character sheet, wearing the approved outfit; Dario, exactly the referenced detective pear, stands on the inside of the police tape with feet apart. One continuous stretch of tape between them, eye-level tense medium two-shot. Mateo has an anxious but restrained expression and empty visible hands. No contact or detention.",
+      "animation_prompt": "integrated_multimodal_description:\n[Shot 1] Portrait 9:16; fixed cinematic camera, grounded 3D fruit-character noir; exactly the approved referenced character(s), same costumes, hands, facing directions, shadows, environment and physical props. Mateo approaches at a measured pace and STOPS before the tape; Dario pivots toward him but does not cross the barrier. Mateo (S1) states carefully <d>[Spanish] Me escribió para que viniera. Cuando llegué, no abrió.</d> Dario (S2) asks <d>[Spanish] ¿A qué hora recibiste el mensaje?</d> Mateo pauses, eyes flicking toward the shutter as if searching his memory. Keep their distance fixed. Actions and dialogue in their written order; listening characters keep lips still. Natural timing, no repeated movements, one dominant emotional arc. Realistic touch, weight and eye-lines.\noverall_soundscape:\nNight air, gentle wind, distant traffic and restrained police-radio noise. No narrator.\nnon_diegetic_music:\nN/A"
+    },
+    {
+      "title": "06 · La hora que no coincide",
+      "description": "La explicación de Mateo choca con una hora del registro; Darío plantea verificar ambas fuentes.",
+      "duration_seconds": 8,
+      "character_ids": [
+        "26b8ab88-57c4-4268-b713-400ef71b2cdc",
+        "151f8b4b-72ee-41df-9062-6651427da474"
+      ],
+      "voice_character_ids": [
+        "151f8b4b-72ee-41df-9062-6651427da474"
+      ],
+      "image_prompt": "Vertical 9:16; cinematic 3D anthropomorphic fruit noir thriller. Preserve the exact appearance, proportions, fruit texture and clothing from the supplied character-sheet reference(s), not an invented interpretation. Faithful consistent muted blue-green night palette, natural practical tungsten spill and cold street light, solid contact shadows, believable architecture and scale, anatomically coherent limbs and hands. Small municipal evidence-controlled service yard next to an old warehouse after midnight. Still frame BEFORE the key action; foreground and midground distinct, enough room for motion. No text, watermark, extra principal characters, graphic injury or exposed body. Two-person conversational reverse angle maintained on the same police-tape axis. Mateo Rivas outside, Dario inside, background shutter and distant blue patrol light consistently positioned. Mateo holds his own phone at waist level screen turned away, not showing fake evidence. Dario has an alert skeptical eye-line, calm professional posture; no aggression.",
+      "animation_prompt": "integrated_multimodal_description:\n[Shot 1] Portrait 9:16; fixed cinematic camera, grounded 3D fruit-character noir; exactly the approved referenced character(s), same costumes, hands, facing directions, shadows, environment and physical props. In a still two-shot, Mateo glances at his own locked phone but does not unlock it. Dario (S1) says <d>[Spanish] El registro marca otra hora. Tendremos que comprobar los dos datos.</d> Mateo (S2), frustrated but controlled, answers <d>[Spanish] Te estoy diciendo la verdad.</d> Dario holds the gaze without accusation. Two silent beats leave the contradiction unresolved. Actions and dialogue in their written order; listening characters keep lips still. Natural timing, no repeated movements, one dominant emotional arc. Realistic touch, weight and eye-lines.\noverall_soundscape:\nNight air, gentle wind, distant traffic and restrained police-radio noise. No narrator.\nnon_diegetic_music:\nN/A"
+    },
+    {
+      "title": "07 · La segunda entrada",
+      "description": "Bruno detecta una puerta lateral con barro reciente; la sospecha deja de centrarse únicamente en Mateo.",
+      "duration_seconds": 7,
+      "character_ids": [
+        "151f8b4b-72ee-41df-9062-6651427da474",
+        "7a047d53-f53f-4519-b6f8-329eb86400b6"
+      ],
+      "voice_character_ids": [
+        "7a047d53-f53f-4519-b6f8-329eb86400b6"
+      ],
+      "image_prompt": "Vertical 9:16; cinematic 3D anthropomorphic fruit noir thriller. Preserve the exact appearance, proportions, fruit texture and clothing from the supplied character-sheet reference(s), not an invented interpretation. Faithful consistent muted blue-green night palette, natural practical tungsten spill and cold street light, solid contact shadows, believable architecture and scale, anatomically coherent limbs and hands. Small municipal evidence-controlled service yard next to an old warehouse after midnight. Still frame BEFORE the key action; foreground and midground distinct, enough room for motion. No text, watermark, extra principal characters, graphic injury or exposed body. Side passage of the same warehouse service yard, the detectives standing before a narrow, partly recessed service door with a fresh muddy shoe imprint beneath its threshold; no identifiable suspect. Bruno in foreground pointing downward at the ground; Dario a step behind looking toward door hinges. A police lamp from the previous yard spills through the passage at matching angle.",
+      "animation_prompt": "integrated_multimodal_description:\n[Shot 1] Portrait 9:16; fixed cinematic camera, grounded 3D fruit-character noir; exactly the approved referenced character(s), same costumes, hands, facing directions, shadows, environment and physical props. Bruno spots the wet track, crouches carefully without touching the ground, then looks up toward Dario. Bruno (S1) says <d>[Spanish] Darío, también hay huellas en esta entrada.</d> Dario (S2) answers <d>[Spanish] Entonces pudo entrar alguien más.</d> Bruno lowers his hand. Camera holds a still view of the unopened door. Actions and dialogue in their written order; listening characters keep lips still. Natural timing, no repeated movements, one dominant emotional arc. Realistic touch, weight and eye-lines.\noverall_soundscape:\nSoft gravel shift under shoes, light nighttime air, faint radio in yard. No narrator.\nnon_diegetic_music:\nN/A"
+    },
+    {
+      "title": "08 · El testimonio pendiente",
+      "description": "Cierre con una segunda pista verificable y la decisión de revisar las grabaciones vecinas.",
+      "duration_seconds": 7,
+      "character_ids": [
+        "151f8b4b-72ee-41df-9062-6651427da474",
+        "7a047d53-f53f-4519-b6f8-329eb86400b6"
+      ],
+      "voice_character_ids": [
+        "151f8b4b-72ee-41df-9062-6651427da474"
+      ],
+      "image_prompt": "Vertical 9:16; cinematic 3D anthropomorphic fruit noir thriller. Preserve the exact appearance, proportions, fruit texture and clothing from the supplied character-sheet reference(s), not an invented interpretation. Faithful consistent muted blue-green night palette, natural practical tungsten spill and cold street light, solid contact shadows, believable architecture and scale, anatomically coherent limbs and hands. Small municipal evidence-controlled service yard next to an old warehouse after midnight. Still frame BEFORE the key action; foreground and midground distinct, enough room for motion. No text, watermark, extra principal characters, graphic injury or exposed body. Final suspense two-shot inside the same narrow warehouse side passage. Dario and Bruno facing a closed side door and an adjacent small neighboring storefront with an outward-facing operational CCTV dome at the far end (visually distant, no text). Dario turns to Bruno with contained realization, Bruno watches the camera position. The blocked door remains shut, fresh footprints undisturbed.",
+      "animation_prompt": "integrated_multimodal_description:\n[Shot 1] Portrait 9:16; fixed cinematic camera, grounded 3D fruit-character noir; exactly the approved referenced character(s), same costumes, hands, facing directions, shadows, environment and physical props. Dario traces the muddy marks visually to the side doorway, then notices a separate camera mounted on the neighboring frontage. Dario (S1) says <d>[Spanish] Esa cámara mira hacia la puerta. Necesito sus imágenes.</d> Bruno silently turns to follow his sightline. Hold one second on the camera; hard cut before showing what it recorded. Actions and dialogue in their written order; listening characters keep lips still. Natural timing, no repeated movements, one dominant emotional arc. Realistic touch, weight and eye-lines.\noverall_soundscape:\nSubtle footsteps settling, distant radio fading into night ambience. No narrator.\nnon_diegetic_music:\nN/A"
+    }
+  ]
+}
