@@ -148,3 +148,32 @@ async def test_mcp_import_and_inspect_existing_asset(client, monkeypatch):
     assert any(part.type == "image" for part in inspect.content)
     with session_factory()() as db:
         assert db.query(GenerationJob).count() == 0
+
+
+
+def test_https_stream_response_accepts_small_png_and_rejects_redirect_or_excess(monkeypatch):
+    import httpx
+    from frutinovelas.services import image_import as imp
+
+    monkeypatch.setattr(imp, "resolve_public_ips", lambda host: ["8.8.8.8"])
+    content = png("green")
+    responses = [
+        httpx.Response(200, content=content, headers={"content-type": "image/png"}),
+        httpx.Response(302, headers={"location": "http://127.0.0.1:8765/secrets"}),
+        httpx.Response(200, content=b"x" * 250),
+    ]
+    calls = []
+
+    def handler(req):
+        calls.append((str(req.url), req.headers.get("authorization"), req.headers.get("cookie")))
+        return responses.pop(0)
+
+    monkeypatch.setattr(imp, "_PinnedHTTPS", lambda host, ip: httpx.MockTransport(handler))
+    url = "https://images.example.org/scene.png"
+    assert imp.download_https(url, 1000) == content
+    with pytest.raises(ImportErrorImage, match="redirecciones"):
+        imp.download_https(url, 1000)
+    with pytest.raises(ImportErrorImage, match="límite"):
+        imp.download_https(url, 100)
+    assert len(calls) == 3
+    assert all(auth is None and cookie is None for _, auth, cookie in calls)
