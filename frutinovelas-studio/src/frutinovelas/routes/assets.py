@@ -1,4 +1,4 @@
-"""Subida y lectura de imágenes gestionadas (solo por ID, nunca por ruta de disco)."""
+"""Subida y lectura de imágenes y audio gestionados, siempre por ID."""
 
 from __future__ import annotations
 
@@ -11,16 +11,17 @@ from frutinovelas.db import get_session
 from frutinovelas.models import Asset
 from frutinovelas.schemas import AssetOut, ErrorOut
 from frutinovelas.services.assets import AssetError, asset_path, store_image, thumbnail_path
+from frutinovelas.services.audio import store_audio
 from frutinovelas.services.scenes import audit
 
-router = APIRouter(tags=["imágenes"])
+router = APIRouter(tags=["archivos"])
 CACHE = {"Cache-Control": "private, max-age=31536000, immutable"}
 
 
 def _asset_or_404(session: Session, asset_id: str) -> Asset:
     asset = session.get(Asset, asset_id)
     if asset is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Imagen no encontrada.")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Archivo no encontrado.")
     return asset
 
 
@@ -37,6 +38,18 @@ def upload_asset(file: UploadFile = File(...), session: Session = Depends(get_se
     return AssetOut.model_validate(asset)
 
 
+@router.post("/assets/audio", response_model=AssetOut, status_code=201, responses={422: {"model": ErrorOut}})
+def upload_audio(file: UploadFile = File(...), session: Session = Depends(get_session)):
+    try:
+        asset = store_audio(session, get_settings(), file.file, file.filename or "audio")
+    except AssetError as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    audit(session, "audio.stored", "asset", asset.id, sha256=asset.sha256)
+    session.commit()
+    return AssetOut.model_validate(asset)
+
+
 @router.get("/assets/{asset_id}", response_model=AssetOut, responses={404: {"model": ErrorOut}})
 def get_asset(asset_id: str, session: Session = Depends(get_session)):
     return AssetOut.model_validate(_asset_or_404(session, asset_id))
@@ -47,7 +60,7 @@ def asset_content(asset_id: str, session: Session = Depends(get_session)):
     asset = _asset_or_404(session, asset_id)
     path = asset_path(get_settings(), asset)
     if not path.is_file():
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "El archivo de la imagen falta en el almacenamiento.")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "El archivo falta en el almacenamiento.")
     return FileResponse(path, media_type=asset.mime, headers=CACHE)
 
 

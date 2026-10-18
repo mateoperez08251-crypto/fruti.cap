@@ -37,7 +37,7 @@ import uuid
 from pathlib import Path
 
 # --------------------------------------------------------------------------- constantes
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 KIT_DIR = Path(__file__).resolve().parents[1]
 BASE = Path(os.environ.get("FRUTI_BASE", "/workspace"))
 COMFY_DIR = BASE / "ComfyUI"
@@ -82,7 +82,11 @@ LOADER_FIELD = {
 }
 
 sys.path.insert(0, str(KIT_DIR / "scripts"))
+sys.path.insert(0, str(KIT_DIR / "src"))
 import validate_workflows as vw  # noqa: E402
+from frutinovelas.services.voice_workflow import (  # noqa: E402
+    VOICE_WORKFLOW, derive_voice_workflow, validate_voice_node_info, validate_voice_workflow,
+)
 
 
 # --------------------------------------------------------------------------- utilidades
@@ -173,6 +177,7 @@ def requests_mod():
 # --------------------------------------------------------------------------- estado
 DEFAULT_CFG = {
     "perfil_video": "h3_balanced_default",
+    "voces_personajes": False,
     "qwen_t2i": False,
     "qwen_edit": "no",
     "acceso": "runpod_proxy" if os.environ.get("RUNPOD_POD_ID") else "quick",
@@ -188,6 +193,8 @@ def aplicar_flags(a: argparse.Namespace) -> dict:
     c = cfg()
     if getattr(a, "perfil", None):
         c["perfil_video"] = a.perfil
+    if getattr(a, "voces_personajes", None):
+        c["voces_personajes"] = a.voces_personajes == "si"
     if getattr(a, "qwen_t2i", None):
         c["qwen_t2i"] = a.qwen_t2i == "si"
     if getattr(a, "qwen_edit", None):
@@ -285,6 +292,8 @@ def profile() -> dict:
 
 def perfiles_activos(c: dict) -> list[str]:
     out = [c["perfil_video"]]
+    if c.get("voces_personajes", False):
+        out.append("h3_voice_references")
     if c["qwen_t2i"]:
         out.append("qwen2512_t2i")
     if c["qwen_edit"] != "no":
@@ -308,7 +317,8 @@ def ruta_local(comp: dict) -> Path:
 
 def verificar_kit() -> None:
     for p in (UI_PATH, KIT_DIR / "config" / "models_manifest.lock.json", KIT_DIR / "config" / "workflow_profiles.json",
-              KIT_DIR / "scripts" / "export_workflow_api.py", KIT_DIR / "scripts" / "comfy_gateway.py"):
+              KIT_DIR / "scripts" / "export_workflow_api.py", KIT_DIR / "scripts" / "comfy_gateway.py",
+              KIT_DIR / "src" / "frutinovelas" / "services" / "voice_workflow.py"):
         if not p.exists():
             fail(f"Kit incompleto: falta {p}")
     sha = hashlib.sha256(UI_PATH.read_bytes()).hexdigest()
@@ -559,6 +569,8 @@ def exportar_y_validar(object_info: dict, forzar: bool) -> dict:
     esperados = set(prof["workflow_api_files"].values()) | {
         NOMBRES_QWEN[p] for p in perfiles_activos(c) if p in NOMBRES_QWEN
     }
+    if c.get("voces_personajes", False):
+        esperados.add(VOICE_WORKFLOW)
     if not forzar and cache_exportacion_valida(previo, clave, esperados, object_info):
         say("Flujos API ya exportados para esta versión y perfiles (usa --reexportar para repetir).")
         return previo
@@ -590,6 +602,31 @@ def exportar_y_validar(object_info: dict, forzar: bool) -> dict:
                                          "sha256": hashlib.sha256(destino.read_bytes()).hexdigest()}
             ok(f"{nombre} ({len(final)} nodos)")
         errores_totales += errores
+
+    if c.get("voces_personajes", False):
+        # Derivar siempre de FL2VA completo; las muestras reales se conectan en Studio.
+        base_voz, cambios = vw.apply_loader_overrides(crudo, overrides)
+        unet = Path(m["components"]["h3_diffusion_ref2va_pruned_int8"]["path"]).name
+        try:
+            validate_voice_node_info(object_info)
+            voz = derive_voice_workflow(base_voz, unet)
+            rv = vw.validate_api_graph(voz, object_info)
+        except ValueError as exc:
+            rv = {"errors": [str(exc)], "warnings": []}
+        for x in rv["warnings"]:
+            say(f"  [voces] aviso: {x}")
+        for x in rv["errors"]:
+            say(f"  [voces] ERROR: {x}")
+        if not rv["errors"]:
+            destino = API_DIR / VOICE_WORKFLOW
+            save_json(destino, voz)
+            informe["flujos"][VOICE_WORKFLOW] = {
+                "modo": "ref2va", "perfil": "h3_voice_references", "nodos": len(voz),
+                "cambios_perfil": cambios, "avisos": rv["warnings"],
+                "sha256": hashlib.sha256(destino.read_bytes()).hexdigest(),
+            }
+            ok(f"{VOICE_WORKFLOW} ({len(voz)} nodos; muestras por personaje desde Studio)")
+        errores_totales += rv["errors"]
 
     for perfil in perfiles_activos(c):
         plantilla = m["profiles"][perfil].get("template")
@@ -636,7 +673,11 @@ def cache_exportacion_valida(informe: dict | None, clave: dict, esperados: set[s
             body = path.read_bytes()
             if hashlib.sha256(body).hexdigest() != datos.get("sha256"):
                 return False
-            if vw.validate_api_graph(json.loads(body), object_info)["errors"]:
+            graph = json.loads(body)
+            if nombre == VOICE_WORKFLOW:
+                validate_voice_node_info(object_info)
+                validate_voice_workflow(graph)
+            if vw.validate_api_graph(graph, object_info)["errors"]:
                 return False
         except (OSError, ValueError, TypeError, AttributeError):
             return False
@@ -1014,6 +1055,8 @@ def cmd_test(a) -> None:
 def main(argv: list[str] | None = None) -> int:
     opciones = argparse.ArgumentParser(add_help=False)
     opciones.add_argument("--perfil", choices=["h3_balanced_default", "h3_quality_bf16_optional"])
+    opciones.add_argument("--voces-personajes", choices=["si", "no"],
+                          help="añade H3 Ref2VA para generar diálogo con muestras de voz guardadas")
     opciones.add_argument("--qwen-t2i", choices=["si", "no"])
     opciones.add_argument("--qwen-edit", choices=["no", "fp8mixed", "bf16"])
     opciones.add_argument("--acceso", choices=["runpod_proxy", "quick", "named", "ninguno"])

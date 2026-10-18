@@ -12,6 +12,20 @@ import httpx
 from cryptography.fernet import Fernet
 
 from frutinovelas.config import get_settings
+from frutinovelas.services.audio_workflow import (
+    AudioWorkflowError,
+    add_audio_guides,
+    validate_audio_graph,
+    validate_audio_node_info,
+)
+from frutinovelas.services.voice_workflow import (
+    VOICE_UNET,
+    VOICE_UNET_SHA256,
+    VOICE_WORKFLOW,
+    VoiceWorkflowError,
+    validate_voice_node_info,
+    validate_voice_workflow,
+)
 
 WORKFLOW = "H3_USUARIO_INICIO_FINAL.api.json"
 
@@ -140,8 +154,89 @@ class ComfyClient:
             ).json()
         return ((data.get("subfolder") + "/") if data.get("subfolder") else "") + data["name"]
 
+    def load_voice_workflow(self, saved_identity):
+        """Read the published Ref2VA graph with the existing connection identity."""
+        identity = self.get("/frutinovelas/identity")
+        if identity_key(identity) != identity_key(saved_identity):
+            raise ComfyError("La conexión guardada cambió. Usa Guardar y comprobar antes de generar con voces.")
+        workflows = identity.get("workflows")
+        expected = workflows.get(VOICE_WORKFLOW) if isinstance(workflows, dict) else None
+        if not expected:
+            raise ComfyError(f"El servidor no publica {VOICE_WORKFLOW}. Activa el perfil de voces Ref2VA en el kit remoto.")
+        models = identity.get("modelos")
+        if not isinstance(models, dict) or not any(
+            isinstance(model, dict) and model.get("archivo") == VOICE_UNET and model.get("sha256") == VOICE_UNET_SHA256
+            for model in models.values()
+        ):
+            raise ComfyError("La identidad del servidor no confirma los pesos Ref2VA de voces. Actualiza el kit y comprueba la conexión.")
+        raw = self.request("GET", "/frutinovelas/workflows/" + VOICE_WORKFLOW).content
+        if hashlib.sha256(raw).hexdigest() != expected:
+            raise ComfyError("No coincide el SHA-256 del flujo de voces con la identidad del servidor.")
+        try:
+            graph = json.loads(raw)
+        except ValueError as exc:
+            raise ComfyError("El servidor no publicó un JSON válido para el flujo de voces.") from exc
+        validate_voice_workflow(graph)
+        return identity, graph
 
-def prepare_graph(graph, prompt, duration, seed, start, end, job_id):
+    def check_voice_support(self, graph):
+        validate_voice_workflow(graph)
+        for class_type in ("LoadAudio", "MiniMaxH3AddGuide", "MiniMaxH3ReferenceToVideo"):
+            try:
+                response = self.request("GET", "/object_info/" + class_type)
+                info = response.json()
+            except ComfyError as exc:
+                if exc.status_code in (400, 404, 422):
+                    raise VoiceWorkflowError(f"El servidor no ofrece {class_type}. Actualiza el kit remoto y comprueba la conexión.") from exc
+                raise
+            except ValueError as exc:
+                raise VoiceWorkflowError(f"ComfyUI devolvió un esquema inválido para {class_type}. No se envió la generación.") from exc
+            if class_type == "MiniMaxH3ReferenceToVideo":
+                validate_voice_node_info(info)
+            else:
+                validate_audio_node_info(class_type, info)
+                if class_type == "MiniMaxH3AddGuide":
+                    inputs = info[class_type]["input"]
+                    fields = {**inputs.get("optional", {}), **inputs.get("required", {})}
+                    if any(not isinstance(fields.get(name), list) or fields[name][:1] != [kind] for name, kind in (("vae", "VAE"), ("image", "IMAGE"))):
+                        raise VoiceWorkflowError("MiniMaxH3AddGuide no admite las anclas visuales del flujo de voces.")
+
+    def check_audio_support(self, graph):
+        validate_audio_graph(graph)
+        for class_type in ("LoadAudio", "MiniMaxH3AddGuide"):
+            try:
+                info = self.get("/object_info/" + class_type)
+            except ComfyError as exc:
+                if exc.status_code in (400, 404, 422):
+                    raise AudioWorkflowError(
+                        f"El servidor no ofrece {class_type}. Actualiza el kit remoto y comprueba la conexión. "
+                        "No se ha enviado la generación."
+                    ) from exc
+                raise
+            validate_audio_node_info(class_type, info)
+
+    def upload_audio(self, path, filename):
+        # ComfyUI uses /upload/image and the multipart field `image` for audio
+        # too. The gateway already permits this authenticated native route.
+        with path.open("rb") as stream:
+            response = self.request(
+                "POST",
+                "/upload/image",
+                files={"image": (filename, stream, "audio/wav")},
+                data={"type": "input", "overwrite": "true"},
+            )
+        try:
+            data = response.json()
+            name = data.get("name") if isinstance(data, dict) else None
+            folder = data.get("subfolder", "") if isinstance(data, dict) else None
+            if not isinstance(name, str) or not name or not isinstance(folder, str):
+                raise ValueError("invalid upload response")
+        except ValueError as exc:
+            raise AudioWorkflowError("ComfyUI no confirmó el archivo de audio subido. No se envió la generación.") from exc
+        return (folder + "/" if folder else "") + name
+
+
+def prepare_graph(graph, prompt, duration, seed, start, end, job_id, *, audio_guides=None, audio_names=None):
     validate_workflow(graph)
     g = copy.deepcopy(graph)
     g["1"]["inputs"]["image"] = start
@@ -154,4 +249,5 @@ def prepare_graph(graph, prompt, duration, seed, start, end, job_id):
     g["12"]["inputs"]["noise_seed"] = seed
     g["28"]["inputs"]["value"] = duration
     g["20"]["inputs"]["filename_prefix"] = "FRUTINOVELAS/" + job_id
+    add_audio_guides(g, [] if audio_guides is None else audio_guides, [] if audio_names is None else audio_names, duration)
     return g

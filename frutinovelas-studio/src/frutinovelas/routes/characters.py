@@ -17,6 +17,8 @@ class CharacterInput(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=10000)
     reference_asset_id: str
+    voice_description: str = Field(default="", max_length=4000)
+    voice_asset_id: str | None = Field(default=None, min_length=1, max_length=36)
 
     @field_validator("name")
     @classmethod
@@ -39,8 +41,16 @@ def list_characters(project_id: str, session: Session = Depends(get_session)):
 
 
 def _save(session, character, data):
-    if session.get(Asset, data.reference_asset_id) is None:
+    reference = session.get(Asset, data.reference_asset_id)
+    if reference is None or reference.kind != "image":
         raise HTTPException(422, "Sube una imagen de referencia válida.")
+    if "voice_asset_id" in data.model_fields_set:
+        voice = session.get(Asset, data.voice_asset_id) if data.voice_asset_id else None
+        if data.voice_asset_id and (voice is None or voice.kind != "audio"):
+            raise HTTPException(422, "Selecciona un archivo de audio válido para la voz.")
+        character.voice_asset_id = data.voice_asset_id
+    if "voice_description" in data.model_fields_set:
+        character.voice_description = data.voice_description
     character.name = data.name
     character.description = data.description
     character.reference_asset_id = data.reference_asset_id
@@ -50,7 +60,7 @@ def _save(session, character, data):
     except IntegrityError as exc:
         session.rollback()
         raise HTTPException(409, "Ya existe un personaje con ese nombre en el proyecto.") from exc
-    session.expire(character, ["reference_asset"])
+    session.expire(character, ["reference_asset", "voice_asset"])
     return public_character(character)
 
 

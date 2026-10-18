@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 from sqlalchemy import and_, func, or_, select
@@ -9,7 +10,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from frutinovelas.models import Asset, AuditEvent, Chapter, GenerationJob, Scene, SceneRevision
 from frutinovelas.schemas import AssetOut, SceneCreate, SceneOut, SceneUpdate
-from frutinovelas.services.characters import scene_parameters
+from frutinovelas.services.characters import scene_parameters, validate_scene_audio
 
 # Campos cuya modificación crea una SceneRevision nueva.
 REVISION_FIELDS = ("prompt", "duration_seconds", "start_asset_id", "end_asset_id", "parameters")
@@ -44,8 +45,10 @@ def audit(
 
 
 def _check_asset(session: Session, asset_id: str | None) -> None:
-    if asset_id is not None and session.get(Asset, asset_id) is None:
-        raise Invalid(f"La imagen {asset_id} no existe.")
+    if asset_id is not None:
+        asset = session.get(Asset, asset_id)
+        if asset is None or asset.kind != "image":
+            raise Invalid(f"La imagen {asset_id} no existe o no es una imagen.")
 
 
 def scene_status(rev: SceneRevision | None) -> str:
@@ -141,7 +144,9 @@ def list_scenes(session: Session, chapter_id: str) -> list[Scene]:
 
 def create_scene(session: Session, chapter: Chapter, data: SceneCreate, actor: str = "ui") -> Scene:
     try:
-        parameters = scene_parameters(session, chapter.id, data.parameters.model_dump(exclude_none=True))
+        parameters = scene_parameters(
+            session, chapter.id, data.parameters.model_dump(exclude_none=True), duration_seconds=data.duration_seconds
+        )
     except ValueError as exc:
         raise Invalid(str(exc)) from exc
     _check_asset(session, data.start_asset_id)
@@ -209,9 +214,15 @@ def update_scene(session: Session, scene: Scene, data: SceneUpdate, actor: str =
                 scene.chapter_id,
                 {**new_values["parameters"], **data.parameters.model_dump(exclude_unset=True)},
                 current.parameters if current else None,
+                duration_seconds=new_values["duration_seconds"],
             )
         except ValueError as exc:
             raise Invalid(str(exc)) from exc
+
+    try:
+        validate_scene_audio(new_values["parameters"], new_values["duration_seconds"])
+    except ValueError as exc:
+        raise Invalid(str(exc)) from exc
 
     if new_values["end_asset_id"] and not new_values["start_asset_id"]:
         raise Invalid("Una imagen final requiere imagen inicial.")
@@ -233,27 +244,27 @@ def duplicate_scene(session: Session, scene: Scene, actor: str = "ui") -> Scene:
         select(Scene).where(Scene.chapter_id == scene.chapter_id, Scene.order_index > scene.order_index)
     ):
         s.order_index += 1
-    copy = Scene(
+    duplicate = Scene(
         chapter_id=scene.chapter_id,
         order_index=scene.order_index + 1,
         title=f"{scene.title} (copia)"[:200],
         description=scene.description,
     )
-    copy.revisions.append(
+    duplicate.revisions.append(
         SceneRevision(
             number=1,
             prompt=rev.prompt if rev else "",
             duration_seconds=rev.duration_seconds if rev else 5.0,
             start_asset_id=rev.start_asset_id if rev else None,
             end_asset_id=rev.end_asset_id if rev else None,
-            parameters=dict(rev.parameters or {}) if rev else {},
+            parameters=copy.deepcopy(rev.parameters or {}) if rev else {},
             author=actor,
         )
     )
-    session.add(copy)
+    session.add(duplicate)
     session.flush()
-    audit(session, "scene.duplicated", "scene", copy.id, actor, source=scene.id)
-    return copy
+    audit(session, "scene.duplicated", "scene", duplicate.id, actor, source=scene.id)
+    return duplicate
 
 
 def reorder_scenes(session: Session, chapter: Chapter, scene_ids: list[str], actor: str = "ui") -> None:

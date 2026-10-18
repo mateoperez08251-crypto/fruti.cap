@@ -16,9 +16,11 @@ from frutinovelas.config import get_settings
 from frutinovelas.db import session_factory
 from frutinovelas.models import Asset, GenerationJob
 from frutinovelas.services.assets import AssetError, asset_path, store_image
+from frutinovelas.services.audio_workflow import AudioWorkflowError, validate_audio_guides
 from frutinovelas.services.comfy import ComfyClient, ComfyError, cipher, identity_key, prepare_graph
 from frutinovelas.services.generation import ACTIVE, transition
 from frutinovelas.services.image_generation import finish_automatic_image, graph_contract, prepare_image_graph
+from frutinovelas.services.voice_workflow import VoiceWorkflowError, prepare_voice_graph, validate_voice_references
 
 log = logging.getLogger(__name__)
 
@@ -160,6 +162,19 @@ class GenerationWorker:
             if job.state in ("queued", "uploading"):
                 if not transition(self.factory, job.id, "uploading"):
                     return
+                audio_guides = p.get("audio_guides", []) if job.kind == "video" else []
+                voice_references = p.get("voice_references", []) if job.kind == "video" else []
+                prepared_audio = []
+                if voice_references:
+                    if audio_guides:
+                        raise VoiceWorkflowError("La escena mezcla voces de personajes y audios guía incompatibles.")
+                    validate_voice_references(voice_references)
+                    client.check_voice_support(p["graph"])
+                    prepared_audio = self.prepare_audio(voice_references)
+                elif audio_guides:
+                    validate_audio_guides(audio_guides, p["duration"])
+                    client.check_audio_support(p["graph"])
+                    prepared_audio = self.prepare_audio(audio_guides)
                 names = {}
                 references = (
                     {str(i): c["asset_id"] for i, c in enumerate(p.get("cast", []))}
@@ -189,21 +204,37 @@ class GenerationWorker:
                         names[role] = client.upload(prepared)
                     finally:
                         prepared.unlink(missing_ok=True)
-                graph = (
-                    prepare_image_graph(
+                audio_names = []
+                for index, prepared in enumerate(prepared_audio):
+                    if self.stop_event.is_set():
+                        return
+                    try:
+                        audio_names.append(client.upload_audio(prepared, f"{job.id}-audio-{index}.wav"))
+                    except ComfyError as exc:
+                        if exc.status_code in (400, 401, 403, 404, 413, 415, 422):
+                            raise AudioWorkflowError(str(exc)) from exc
+                        raise
+                if job.kind == "image":
+                    graph = prepare_image_graph(
                         p["graph"], p["prompt"], p.get("cast", []), p["seed"], list(names.values()), job.id
                     )
-                    if job.kind == "image"
-                    else prepare_graph(
+                elif voice_references:
+                    graph = prepare_voice_graph(
+                        p["graph"], p["effective_prompt"], p["duration"], p["seed"],
+                        names["start"], names.get("end"), job.id, voice_references, audio_names,
+                    )
+                else:
+                    graph = prepare_graph(
                         p["graph"],
-                        p["prompt"],
+                        p.get("effective_prompt", p["prompt"]),
                         p["duration"],
                         p["seed"],
                         names["start"],
                         names.get("end"),
                         job.id,
+                        audio_guides=audio_guides,
+                        audio_names=audio_names,
                     )
-                )
                 if self.stop_event.is_set() or not transition(self.factory, job.id, "submitting"):
                     return
                 try:
@@ -320,8 +351,38 @@ class GenerationWorker:
                 result_mime="video/mp4" if suffix == ".mp4" else "video/webm",
                 result_sha256=digest.hexdigest(),
             )
+        except (AudioWorkflowError, VoiceWorkflowError) as exc:
+            transition(self.factory, job.id, "failed", str(exc), expected_states=("queued", "uploading"))
         finally:
             client.close()
+
+    def prepare_audio(self, guides):
+        """Verify the frozen source before deriving/uploading its PCM audio."""
+        from frutinovelas.services.audio import prepare_audio_path
+
+        prepared = []
+        for guide in guides:
+            if self.stop_event.is_set():
+                return []
+            with self.factory() as session:
+                asset = session.get(Asset, guide["asset_id"])
+                if (
+                    asset is None or asset.kind != "audio" or asset.sha256 != guide["asset"]["sha256"]
+                    or asset.duration_seconds != guide["asset"].get("duration_seconds")
+                ):
+                    raise AudioWorkflowError("Falta el audio original de esta versión o cambió su identidad.")
+                try:
+                    original = asset_path(self.settings, asset)
+                    with original.open("rb") as stream:
+                        actual_sha256 = hashlib.file_digest(stream, "sha256").hexdigest()
+                    if actual_sha256 != guide["asset"]["sha256"]:
+                        raise AudioWorkflowError("El archivo de audio cambió desde que se guardó la escena.")
+                    prepared.append(prepare_audio_path(self.settings, asset))
+                except AssetError as exc:
+                    raise AudioWorkflowError(str(exc)) from exc
+                except OSError as exc:
+                    raise AudioWorkflowError("No se pudo leer o preparar el audio original de esta escena.") from exc
+        return prepared
 
     def download_image(self, client, job, history):
         output, _, _ = graph_contract(job.snapshot["graph"], bool(job.snapshot.get("cast")))
