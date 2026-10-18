@@ -2,6 +2,10 @@
 
 ## Abrir el programa en Windows
 
+Para repetir el arranque que ya funcionó en tu PC, consulta
+[Inicio diario y recuperación de MCP en PowerShell](docs/INICIO_DIARIO_MCP_WINDOWS.md).
+Incluye las tres ventanas, el perfil existente y el diagnóstico de errores sin guardar claves.
+
 Desde esta carpeta, ejecuta `iniciar.cmd` (también admite doble clic). Instala las
 dependencias necesarias, compila la interfaz e inicia la API. Necesita Python y
 Node.js 24 LTS (también admite la rama 22 desde 22.13). El programa abre http://127.0.0.1:8765; mantén la terminal

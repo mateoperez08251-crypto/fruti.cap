@@ -1,6 +1,12 @@
 FRUTI.CAP — INICIO EN WINDOWS Y CONEXIÓN MCP CON CHATGPT
 Revisado: 18 de octubre de 2026
 
+INICIO DIARIO EN LA PC YA CONECTADA (PowerShell):
+Consulta docs/INICIO_DIARIO_MCP_WINDOWS.md. Registra las rutas de la instalación,
+el perfil fruti-nuevo y la prueba real con el plugin mcp del 18 de octubre.
+No recrees un túnel o perfil que ya funciona. El resto de este TXT es una guía
+general; fruti-local y C:\proyectos son ejemplos, no los datos de esa PC.
+
 Esta guía corresponde al código de este repositorio. Sustituye las rutas de
 ejemplo por tus carpetas reales. Los ejemplos de Windows de esta guía se pegan en CMD.
 Ejecuta una línea cada vez y comprueba que terminó sin error antes de seguir.
