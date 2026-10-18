@@ -65,6 +65,41 @@ def register_studio_tools(server):
             "content_base64": content_base64, "url": url,
         })
 
+
+    @server.tool(annotations=read)
+    def list_narrated_videos(project_id: str) -> list[dict]:
+        """Listar videos narrados, IDs reales y estado. El audio lo sube el usuario desde Studio."""
+        return studio_request("GET", f"projects/{_id(project_id)}/narrated-videos")
+
+    @server.tool(annotations=read)
+    def get_narrated_video(video_id: str) -> dict:
+        """Leer duración del audio, transcripción, imágenes, movimientos y tomas del montaje."""
+        return studio_request("GET", f"narrated-videos/{_id(video_id)}")
+
+    @server.tool(annotations=write)
+    def save_narrated_storyboard(
+        video_id: str, expected_revision: int, shots: list[dict],
+        transcript: str | None = None,
+    ) -> dict:
+        """Guardar tomas sincronizadas con un audio ya subido (hasta 5 min).
+        Cada toma incluye start_seconds, end_seconds, text, image_prompt,
+        image_asset_id (opcional) y motion (zoom_in/zoom_out/pan_left/pan_right/still).
+        No ejecuta GPU ni exporta. Utiliza IDs de imágenes registrados en Studio.
+        El conjunto debe cubrir la duración completa del audio sin huecos.
+        """
+        body = {"expected_revision": expected_revision, "shots": shots}
+        if transcript is not None:
+            body["transcript"] = transcript
+        return studio_request("PATCH", f"narrated-videos/{_id(video_id)}", body)
+
+    @server.tool(annotations=write)
+    def render_narrated_video(video_id: str, expected_revision: int) -> dict:
+        """Exportar MP4 solo bajo petición explícita. FFmpeg anima imágenes aprobadas
+        y añade la narración original como banda sonora principal. No invoca GPU.
+        """
+        return studio_request("POST", f"narrated-videos/{_id(video_id)}/render",
+                              {"expected_revision": expected_revision})
+
     @server.tool(annotations=read)
     def list_studio_projects() -> list[dict]:
         """Obtener IDs reales de los proyectos. No deducirlos de títulos."""
