@@ -85,8 +85,8 @@ async def test_refuses_invalid_reference_before_creating_chapter(client, monkeyp
     monkeypatch.setattr(mcp_studio, "studio_request", _proxy(client))
     plan = _plan(project["id"], "missing-character")
     mcp = create_server()
-    result = await mcp.call_tool("create_studio_chapter_plan", {"plan": plan})
-    assert result.is_error
+    with pytest.raises(Exception, match="falta un personaje"):
+        await mcp.call_tool("create_studio_chapter_plan", {"plan": plan})
     assert client.get(f"/api/v1/projects/{project['id']}/chapters").json() == []
 
 
@@ -111,8 +111,8 @@ async def test_refuses_to_overwrite_changed_scene(client, monkeypatch):
     assert client.patch(f"/api/v1/scenes/{scene['id']}", json={
         "expected_revision": scene["revision"], "prompt": "Editado manualmente.",
     }).status_code == 200
-    result = await mcp.call_tool("create_studio_chapter_plan", {"plan": plan})
-    assert result.is_error
+    with pytest.raises(Exception, match="ya fue editada"):
+        await mcp.call_tool("create_studio_chapter_plan", {"plan": plan})
     assert len(client.get(f"/api/v1/chapters/{chapter['id']}/scenes").json()) == 2
     after = client.get(f"/api/v1/scenes/{scene['id']}").json()
     assert after["prompt"] == "Editado manualmente."
