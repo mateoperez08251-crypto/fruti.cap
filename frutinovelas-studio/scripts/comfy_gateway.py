@@ -117,6 +117,8 @@ def create_app(
     token: str,
     workflows_dir: Path | None = None,
     identity_file: Path | None = None,
+    narration_dir: Path | None = None,
+    comfy_output_dir: Path | None = None,
 ) -> web.Application:
     if not token or len(token) < 16:
         raise ValueError("El token del gateway debe tener al menos 16 caracteres.")
@@ -299,10 +301,19 @@ def create_app(
         log.info("%s %s -> %s (%.2fs)", method, path, up.status, time.monotonic() - started)
         return resp
 
+    if narration_dir is not None:
+        from narrated_gateway import NarrationStore, configure_narration
+        # Register before the catch-all ComfyUI proxy. Jobs and data stay remote.
+        app.on_startup.append(lambda app_: configure_narration(app_, narration_dir, comfy_output_dir))
+
     app.router.add_get("/healthz", healthz)
     app.router.add_get("/frutinovelas/identity", identity)
     app.router.add_get("/frutinovelas/workflows", list_workflows)
     app.router.add_get("/frutinovelas/workflows/{name}", get_workflow)
+    if narration_dir is not None:
+        # route registration must occur before application startup and before catch-all
+        from narrated_gateway import register_narration_routes
+        register_narration_routes(app)
     app.router.add_route("*", "/{tail:.*}", proxy)
     return app
 
@@ -324,6 +335,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--upstream", default="http://127.0.0.1:8188")
     ap.add_argument("--workflows-dir")
     ap.add_argument("--identity-file")
+    ap.add_argument("--narration-dir")
+    ap.add_argument("--comfy-output-dir")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stderr)
     app = create_app(
@@ -331,6 +344,8 @@ def main(argv: list[str] | None = None) -> int:
         _read_token(),
         Path(args.workflows_dir) if args.workflows_dir else None,
         Path(args.identity_file) if args.identity_file else None,
+        Path(args.narration_dir) if args.narration_dir else None,
+        Path(args.comfy_output_dir) if args.comfy_output_dir else None,
     )
     web.run_app(app, host=args.listen, port=args.port, access_log=None, print=None)
     return 0
