@@ -31,3 +31,8 @@ Los prompts de imagen no activan su generación automáticamente. Puedes usar la
 uv run pytest tests/test_narrated.py
 npm --prefix frontend run build
 npm --prefix frontend run lint
+## Descartar resultados y ahorro de almacenamiento
+
+Desde la galería de imágenes Qwen y las generaciones H3, **Descartar** exige confirmación. Solo se permite con trabajos terminados y archivos que no son referencias de escenas, personajes, videos narrados ni montajes históricos. Primero intenta borrar la salida original del ComfyUI remoto usando el gateway autenticado y después la copia de Studio; si el gateway falla se conserva la copia local para repetir. La exportación narrada dispone de **Eliminar MP4**: elimina su MP4 de RunPod/Colab y de Studio, pero mantiene audio, prompts e imágenes para un nuevo montaje. El gateway también permite eliminar recursos temporales de narración por hash cuando no están en trabajos activos; nunca elimina modelos ni directorios de ComfyUI.
+
+**Limitación económica:** borrar archivos libera disco, pero no devuelve créditos de inferencia ya gastados. Para ahorrar GPU, revisa y aprueba las imágenes antes de animarlas; regenera solo planos fallidos, y detén el pod al acabar.
