@@ -171,6 +171,20 @@ def discard_generated_output(job_id: str, session: Session = Depends(get_session
         for render in session.scalars(select(ChapterRender)):
             if any(entry.get("video_job_id") == job_id for entry in render.snapshot.get("scenes", [])):
                 raise HTTPException(409, "El video pertenece al historial de un capítulo automático.")
+    # Purge the generated ComfyUI copy first; otherwise keep the local file
+    # so a failed remote cleanup can be retried without losing data.
+    from frutinovelas.models import ComfyConnection
+    from frutinovelas.services.generation import connection_token
+    connection = session.get(ComfyConnection, "default")
+    if connection:
+        remote = ComfyClient(connection.url, connection_token(connection))
+        try:
+            remote.request("DELETE", f"/frutinovelas/narration/generated/{job.id}",
+                           params={"kind": job.kind})
+        except (ComfyError, httpx.HTTPError) as exc:
+            raise HTTPException(503, "No se pudo liberar la copia remota. Actualiza el gateway o reintenta con ComfyUI conectado.") from exc
+        finally:
+            remote.close()
     settings = get_settings()
     filename = None
     if job.result_path:
@@ -191,4 +205,4 @@ def discard_generated_output(job_id: str, session: Session = Depends(get_session
     session.commit()
     if filename and filename.is_file():
         filename.unlink()
-    return {"discarded": True, "remote_copy": "not_deleted", "local_output_deleted": True}
+    return {"discarded": True, "remote_copy": "deleted" if connection else "not_connected", "local_output_deleted": True}
