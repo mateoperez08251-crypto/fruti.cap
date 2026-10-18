@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, ApiError, assetUrl, type NarratedVideo, type NarratedShot } from '../api'
-import { Film, Plus, Save, Upload, WandSparkles, Play, Music2 } from 'lucide-react'
+import { Film, Plus, Save, Upload, WandSparkles, Play, Music2, Trash2 } from 'lucide-react'
 
 const motions: NarratedShot['motion'][] = ['zoom_in', 'zoom_out', 'pan_left', 'pan_right', 'still']
 const labels: Record<NarratedShot['motion'], string> = {
@@ -73,6 +73,16 @@ export function NarratedPage() {
     try { const v = await api.renderNarratedVideo(draft.id, draft.revision); choose(v); setNotice('Montaje iniciado. Conservaremos el audio original.') }
     catch (e) { fail(e) } finally { setBusy(false) }
   }
+  const deleteOutput = async () => {
+    if (!draft || !window.confirm('Eliminar este MP4 de Studio y de RunPod/Colab? El guion, las imagenes y el audio se conservaran.')) return
+    setBusy(true); setError('')
+    try {
+      const updated = await api.deleteNarratedOutput(draft.id)
+      choose(updated)
+      setVideos(old => old.map(v => v.id === updated.id ? updated : v))
+      setNotice('Video final eliminado. Las escenas siguen disponibles.')
+    } catch (e) { fail(e) } finally { setBusy(false) }
+  }
   const split = (i: number) => {
     if (!draft) return
     const s = draft.shots[i], mid = Number(((s.start_seconds+s.end_seconds)/2).toFixed(3))
@@ -135,7 +145,8 @@ export function NarratedPage() {
       </article>)}</div>
       {draft.state==='rendering'||draft.state==='queued' ? <p role="status">Exportando: {draft.progress}%</p> : null}
       {draft.error && <p className="generation-error" role="alert">{draft.error}</p>}
-      {draft.result_url && <div className="narration-result"><h3>Video terminado</h3><video controls src={draft.result_url}/><a className="btn btn-primary" href={draft.result_url} download><Upload size={15}/> Descargar MP4</a></div>}
+      {draft.result_url && <div className="narration-result"><h3>Video terminado</h3><video controls src={draft.result_url}/><a className="btn btn-primary" href={draft.result_url} download><Upload size={15}/> Descargar MP4</a>
+        <button className="btn btn-danger" disabled={busy} onClick={() => void deleteOutput()}><Trash2 size={15}/> Eliminar MP4 para liberar espacio</button></div>}
     </section>}
     {error && <p className="generation-error" role="alert">{error}</p>}
     {notice && <p role="status">{notice}</p>}
