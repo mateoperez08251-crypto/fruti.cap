@@ -319,10 +319,9 @@ class NarrationStore:
         return {name: row[name] for name in ("id", "state", "progress", "error")}
 
 
-async def configure_narration(app: web.Application, root: Path, comfy_output: Path | None = None) -> None:
+def register_narration_routes(app: web.Application, root: Path, comfy_output: Path | None = None) -> None:
     store = NarrationStore(root, comfy_output)
     store.recover()
-    app["narrated_store"] = store
 
     async def capabilities(_request):
         return web.json_response({"supported": True, "engine": "remote-ffmpeg", "max_seconds": MAX_SECONDS,
