@@ -112,3 +112,7 @@ permitidos los servidores MCP personalizados.
 de operaciones. Quien tenga la URL puede invocar también herramientas que
 modifican proyectos o inician generaciones. Usa datos descartables y detén la
 consola con Ctrl+C al terminar. No lo uses como servicio permanente.
+
+## Importar imágenes creadas fuera de ComfyUI
+
+Tras actualizar Studio y reiniciar el MCP, los clientes pueden descubrir `import_studio_image`. Para usarla deben transferir bytes base64 o suministrar una URL HTTPS pública que la PC pueda descargar; importar no asigna ni genera. La referencia detallada está en [IMPORTAR_IMAGENES_MCP.md](IMPORTAR_IMAGENES_MCP.md). La URL de prueba pública sin autenticación permite escrituras desde cualquier cliente que la conozca, por lo que conviene cerrarla al terminar.
