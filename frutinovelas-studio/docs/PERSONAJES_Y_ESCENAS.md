@@ -137,3 +137,19 @@ antes de ejecutar la cola; el modo manual permite revisar las imágenes antes de
 preparar la animación. La aprobación automática comprueba disponibilidad técnica,
 no calidad visual. Las pruebas incluyen gateway simulado y un montaje FFmpeg real
 con clips sintéticos; no se ha ejecutado GPU ni evaluado el video de tu instalación.
+
+## Crear capítulos y escenas íntegros mediante MCP
+
+Para que ChatGPT no obligue al usuario a crear escenas manualmente, el MCP publica
+`create_studio_chapter_plan(plan)`: acepta `project_id`, `plan_id` estable, título,
+guion y continuidad del capítulo, y escenas con título, descripción, prompt de
+imagen, prompt de animación, segundos, hasta dos IDs de personajes para Qwen y
+hasta tres voces si sus muestras suman como máximo 15 s. No inicia GPU y conserva
+la aprobación manual. Comprueba personajes reales, límites y contenido antes de
+escribir; si hay un capítulo del mismo título con contenido diferente, no lo pisa.
+En reintentos, solo reutiliza un prefijo de escenas idénticas.
+
+Tras un `git pull` hay que reiniciar Studio y el proceso MCP para que ChatGPT vea
+la nueva herramienta. El ejemplo de Capítulo 2 de detectives está en
+`examples/chapters/dario_capitulo_2.json` como propuesta creativa editable,
+no como hechos confirmados del Capítulo 1.
