@@ -15,6 +15,7 @@ class NarratedShot(BaseModel):
     end_seconds: float = Field(gt=0, le=300, allow_inf_nan=False)
     text: str = Field(default="", max_length=2000)
     image_prompt: str = Field(default="", max_length=30000)
+    animation_prompt: str = Field(default="", max_length=30000)
     image_asset_id: str | None = Field(default=None, max_length=36)
     motion: Motion = "zoom_in"
 
