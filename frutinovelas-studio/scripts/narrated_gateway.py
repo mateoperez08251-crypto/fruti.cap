@@ -307,12 +307,85 @@ class NarrationStore:
                 if existing.get("signature") != signature:
                     raise web.HTTPConflict(text="Ese ID pertenece a otro montaje.")
                 return self.public(existing)
-            row = {"id": data["id"], "signature": signature, "state": "queued", "progress": 0, "error": ""}
+            row = {"id": data["id"], "signature": signature, "manifest": data,
+                   "state": "queued", "progress": 0, "error": ""}
             self.save(row)
             task = asyncio.create_task(asyncio.to_thread(self.assemble, data))
             self.tasks.add(task)
             task.add_done_callback(self.tasks.discard)
             return self.public(row)
+
+    async def remove_export(self, job_id: str) -> dict:
+        """Remove exactly this remote completed MP4 and its job record."""
+        async with self.lock:
+            row = self.read(job_id)
+            if row is None:
+                return {"deleted": False, "bytes_freed": 0}
+            if row["state"] in ("queued", "rendering"):
+                raise web.HTTPConflict(text="No se puede eliminar una exportación en curso.")
+            target = self.output / (job_id + ".mp4")
+            size = target.stat().st_size if target.is_file() and not target.is_symlink() else 0
+            if target.is_symlink():
+                raise web.HTTPConflict(text="El archivo de salida no es seguro.")
+            target.unlink(missing_ok=True)
+            self.filename(job_id).unlink(missing_ok=True)
+            return {"deleted": True, "bytes_freed": size}
+
+    async def remove_staged_asset(self, sha: str, kind: str) -> dict:
+        """Reclaim a staged copy, never an input of an active montage."""
+        async with self.lock:
+            if not isinstance(sha, str) or not SHA.fullmatch(sha) or kind not in EXTENSIONS:
+                raise AssemblyError("El recurso remoto solicitado no es válido.")
+            for job_file in self.jobs.glob("*.json"):
+                try:
+                    job = json.loads(job_file.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    raise web.HTTPConflict(text="No es seguro borrar mientras hay trabajos ilegibles.")
+                if job.get("state") not in ("queued", "rendering"):
+                    continue
+                manifest = job.get("manifest") or {}
+                used = {manifest.get("audio_id")} | {
+                    shot.get("image_id") for shot in manifest.get("shots", []) if isinstance(shot, dict)
+                }
+                if sha in used or not manifest:
+                    raise web.HTTPConflict(text="La imagen o el audio se utiliza en un montaje activo.")
+            paths = [self.assets / (sha + ext) for ext in EXTENSIONS[kind]]
+            freed = 0
+            for path in paths:
+                if path.is_symlink():
+                    raise web.HTTPConflict(text="Recurso no seguro para borrar.")
+                if path.is_file():
+                    freed += path.stat().st_size
+                    path.unlink()
+            return {"deleted": freed > 0, "bytes_freed": freed}
+
+    async def remove_generation_file(self, job_id: str, kind: str) -> dict:
+        """Delete generated ComfyUI output(s) with an exact UUID-owned prefix.
+
+        Never traverse folders or delete unrelated ComfyUI outputs.
+        """
+        self.filename(job_id)  # validates normalized UUID
+        if kind not in ("image", "video"):
+            raise AssemblyError("Tipo de generación inválido.")
+        if not self.comfy_output:
+            raise AssemblyError("Falta la carpeta de salida de ComfyUI.")
+        folder = self.comfy_output / "FRUTINOVELAS"
+        if not folder.is_dir() or folder.is_symlink():
+            return {"deleted": False, "bytes_freed": 0}
+        prefix = (("IMAGE-" if kind == "image" else "") + job_id + "_")
+        allowed = {".png", ".jpg", ".webp"} if kind == "image" else {".mp4", ".webm"}
+        # Avoid deleting in-progress ComfyUI jobs: require an existing, terminal
+        # history record before removing any generated output.
+        # Studio also enforces this state before calling this endpoint.
+        async with self.lock:
+            files = [f for f in folder.iterdir() if f.name.startswith(prefix) and f.suffix.lower() in allowed]
+            if any(f.is_symlink() or not f.is_file() or f.resolve().parent != folder.resolve() for f in files):
+                raise web.HTTPConflict(text="Hay salidas no seguras: no se borró nada.")
+            freed = 0
+            for file in files:
+                freed += file.stat().st_size
+                file.unlink()
+            return {"deleted": bool(files), "files_deleted": len(files), "bytes_freed": freed}
 
     @staticmethod
     def public(row: dict) -> dict:
@@ -385,8 +458,31 @@ def register_narration_routes(app: web.Application, root: Path, comfy_output: Pa
             raise web.HTTPNotFound()
         return web.FileResponse(path, headers={"Content-Type": "video/mp4"})
 
+    async def delete_export(request):
+        try:
+            return web.json_response(await store.remove_export(request.match_info["id"]))
+        except AssemblyError as exc:
+            raise web.HTTPUnprocessableEntity(text=str(exc)) from exc
+
+    async def delete_asset(request):
+        try:
+            return web.json_response(await store.remove_staged_asset(
+                request.match_info["sha"], request.query.get("kind", "")))
+        except AssemblyError as exc:
+            raise web.HTTPUnprocessableEntity(text=str(exc)) from exc
+
+    async def delete_generation(request):
+        try:
+            return web.json_response(await store.remove_generation_file(
+                request.match_info["id"], request.query.get("kind", "")))
+        except AssemblyError as exc:
+            raise web.HTTPUnprocessableEntity(text=str(exc)) from exc
+
     app.router.add_get("/frutinovelas/narration/capabilities", capabilities)
     app.router.add_post("/frutinovelas/narration/assets", upload)
     app.router.add_post("/frutinovelas/narration/jobs", create)
     app.router.add_get("/frutinovelas/narration/jobs/{id}", status)
     app.router.add_get("/frutinovelas/narration/jobs/{id}/file", download)
+    app.router.add_delete("/frutinovelas/narration/jobs/{id}", delete_export)
+    app.router.add_delete("/frutinovelas/narration/assets/{sha}", delete_asset)
+    app.router.add_delete("/frutinovelas/narration/generated/{id}", delete_generation)
