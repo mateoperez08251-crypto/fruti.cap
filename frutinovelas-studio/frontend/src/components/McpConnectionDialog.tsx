@@ -3,7 +3,7 @@ import { Check, Copy, Download, ExternalLink, Loader2, RefreshCw, X } from 'luci
 import { useEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
 import { api, type McpConnectionInfo } from '../api'
 
-type Client = 'chatgpt' | 'claude-desktop' | 'claude-web'
+type Client = 'chatgpt' | 'claude-desktop' | 'claude-web' | 'public-test'
 type Props = { onClose: () => void; returnFocus: RefObject<HTMLButtonElement | null> }
 
 const readingTest = 'Usa las herramientas de FRUTINOVELAS. Llama a get_directing_guidance con task="animation", preset="frutinovelas" e include_example_story=false. Resume las reglas de movimiento, sombras, expresiones y diálogo. No guardes cambios ni generes un video.'
@@ -41,6 +41,21 @@ function CopyBlock({ id, label, value, rows = 3 }: { id: string; label: string; 
 
 function ClientInstructions({ client, info }: { client: Client; info: McpConnectionInfo }) {
   const config = JSON.stringify(info.claude_desktop_config, null, 2)
+  if (client === 'public-test') return <section className="mcp-instructions" aria-label="Prueba pública del MCP">
+    <h3>Prueba pública · URL HTTPS temporal</h3>
+    <p>Esto permite conectarse mediante una URL externa sin pertenecer a tu organización de OpenAI. <strong>Sin autenticación, cualquier persona que conozca el enlace puede leer proyectos, modificar escenas o solicitar generaciones.</strong> Usa únicamente proyectos de prueba y detén el túnel cuando termines.</p>
+    <ol className="mcp-steps">
+      <li>Instala <code>cloudflared</code> desde Cloudflare si no está instalado. En Windows puedes usar <code>winget install --id Cloudflare.cloudflared</code>.</li>
+      <li>Abre <strong>CMD</strong> en la carpeta <code>frutinovelas-studio</code>, con Studio encendido. Ejecuta el archivo indicado abajo; escribe <strong>PUBLICAR</strong> cuando solicite confirmación.</li>
+      <li>La consola mostrará una URL <code>https://…trycloudflare.com/mcp</code>. Copia esa URL completa; <strong>no uses localhost ni selecciones Tunnel de OpenAI</strong>.</li>
+      <li>En tu cliente ChatGPT o Claude, agrega un servidor MCP <strong>remoto / por URL</strong>, pega el HTTPS generado y elige <strong>sin autenticación</strong> cuando el cliente lo permita. Esa cuenta debe tener habilitada la conexión de MCP personalizados.</li>
+      <li>Prueba <code>get_directing_guidance</code> y comprueba la llamada real. Presiona <strong>Ctrl+C</strong> en la consola pública para cortar el acceso.</li>
+    </ol>
+    <CopyBlock id="mcp-public-test-cmd" label="Comando de prueba pública · CMD (desde frutinovelas-studio)" value="publicar_mcp_prueba.cmd" rows={1} />
+    <p className="hint">La URL se crea al iniciar Cloudflare Quick Tunnel y puede cambiar en cada ejecución. Studio no puede inventarla ni comprobar el acceso de una cuenta externa.</p>
+    <a className="mcp-doc-link" href="https://github.com/mateoperez08251-crypto/fruti.cap/blob/main/frutinovelas-studio/docs/MCP_PUBLICO_PRUEBA.md" target="_blank" rel="noreferrer">Manual de prueba pública <ExternalLink size={14} aria-hidden="true" /></a>
+  </section>
+
   if (client === 'claude-web') return <section className="mcp-instructions" aria-label="Configurar Claude web">
     <h3>Claude web necesita un servidor remoto</h3>
     <p>Claude web requiere una URL HTTPS accesible desde su nube y un despliegue con protección y autenticación adecuadas. Ese despliegue todavía no está incluido en Studio.</p>
@@ -159,7 +174,7 @@ export function McpConnectionDialog({ onClose, returnFocus }: Props) {
         <button type="button" className="btn btn-ghost btn-icon" aria-label="Cerrar conexión MCP" onClick={onClose}><X size={18} aria-hidden="true" /></button>
       </header>
       <div className="mcp-clients" role="group" aria-label="Cliente MCP">
-        {([['chatgpt', 'ChatGPT'], ['claude-desktop', 'Claude Desktop'], ['claude-web', 'Claude web']] as const).map(([value, label]) =>
+        {([['chatgpt', 'ChatGPT'], ['claude-desktop', 'Claude Desktop'], ['claude-web', 'Claude web'], ['public-test', 'Prueba pública HTTPS']] as const).map(([value, label]) =>
           <button key={value} type="button" className={`btn ${client === value ? 'btn-primary' : ''}`} aria-pressed={client === value} onClick={() => setClient(value)}>{label}</button>)}
       </div>
       {connection.isPending && <p className="hint" role="status"><Loader2 size={16} className="spin" aria-hidden="true" /> Cargando configuración local…</p>}

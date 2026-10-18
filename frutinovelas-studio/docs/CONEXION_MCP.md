@@ -93,3 +93,22 @@ devuelve metadatos y configuración sin tokens; `GET /api/v1/mcp/status` comprue
 el protocolo local con inicialización y listado de herramientas. Ninguna equivale
 a una sesión iniciada en una cuenta externa. Consulta [Autenticación](AUTENTICACION.md)
 para distinguir los controles efectivos de las variables declaradas.
+
+## Conexión desde otras cuentas: URL pública temporal de prueba
+
+Si el túnel privado de OpenAI devuelve «Acceso denegado» a otra organización o
+workspace, puedes probar con una **URL HTTPS externa** sin asociar esas cuentas al
+túnel privado. Consulta [MCP_PUBLICO_PRUEBA.md](MCP_PUBLICO_PRUEBA.md).
+
+Abre **Conexión MCP → Prueba pública HTTPS** para ver los pasos. En Windows, dentro
+de `frutinovelas-studio`, ejecuta `publicar_mcp_prueba.cmd` tras iniciar Studio.
+El script pide escribir `PUBLICAR`, arranca el MCP en loopback (o reutiliza el
+que está escuchando), crea un Cloudflare Quick Tunnel y muestra el enlace
+`https://…trycloudflare.com/mcp`. En ChatGPT o Claude selecciona conexión
+**remota / por URL**, no el túnel privado de OpenAI. La cuenta necesita tener
+permitidos los servidores MCP personalizados.
+
+**Aviso:** esta prueba no añade contraseña, autorización por usuario ni protección
+de operaciones. Quien tenga la URL puede invocar también herramientas que
+modifican proyectos o inician generaciones. Usa datos descartables y detén la
+consola con Ctrl+C al terminar. No lo uses como servicio permanente.
