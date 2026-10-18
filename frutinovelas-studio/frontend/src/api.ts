@@ -224,6 +224,8 @@ const json = (method: string, data: unknown): RequestInit => ({
 })
 
 export const api = {
+  deleteNarratedOutput: (id: string) => request<NarratedVideo>('/narrated-videos/' + id + '/output', { method: 'DELETE' }),
+  discardGenerationOutput: (id: string) => request<{discarded: boolean; remote_copy: string}>('/generations/' + id + '/output', { method: 'DELETE' }),
   narratedVideos: (projectId: string) => request<NarratedVideo[]>('/projects/' + projectId + '/narrated-videos'),
   narratedVideo: (id: string) => request<NarratedVideo>('/narrated-videos/' + id),
   uploadNarration: (file: File) => {
