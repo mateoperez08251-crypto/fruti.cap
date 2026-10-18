@@ -33,6 +33,7 @@ def test_guides_are_allowlisted_and_links_work_over_mcp():
     with pytest.raises(ValueError):
         read_guide("../../pyproject.toml")
     assert "frutinovelas://guides/models" in read_guide("skill-animation")
+    assert "frutinovelas://guides/voices" in read_guide("skill-animation")
 
 
 @pytest.mark.asyncio
@@ -45,6 +46,8 @@ async def test_mcp_exposes_guidance_resources_and_portable_prompt():
     assert any(entry["name"] == "skill-image" for entry in catalog)
     resource = await server.read_resource("frutinovelas://guides/director-core")
     assert "cualquier escena" in next(iter(resource)).content
+    styles = await server.read_resource("frutinovelas://guides/visual-styles")
+    assert "angulado_geometrico_y2k" in next(iter(styles)).content
     prompt = await server.get_prompt(
         "direct_scene",
         {"request": "A realistic dog crossing a wet street", "task": "animation", "preset": "general"},

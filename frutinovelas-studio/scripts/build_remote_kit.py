@@ -26,6 +26,9 @@ FILES = {
     "scripts/comfy_gateway.py": 0o644,
     "config/models_manifest.lock.json": 0o644,
     "config/workflow_profiles.json": 0o644,
+    "src/frutinovelas/__init__.py": 0o644,
+    "src/frutinovelas/services/__init__.py": 0o644,
+    "src/frutinovelas/services/voice_workflow.py": 0o644,
 }
 UI = "workflows/H3_EQUILIBRADO_9x16_INICIO_FINAL.ui.json"
 
@@ -42,6 +45,12 @@ Después existe el atajo «fruti»:
   fruti logs comfyui -f        logs en directo
   fruti stop                   detener servicios
   fruti start                  arrancar de nuevo (p. ej. tras reanudar el pod)
+
+Para generar diálogos nuevos con una muestra de voz por personaje:
+  fruti models --voces-personajes si
+  fruti start --voces-personajes si --reexportar
+Descarga Ref2VA INT8 (20,97 GB adicionales) y reutiliza el encoder y los VAEs H3.
+Después vuelve a Guardar y comprobar la conexión en Studio.
 
 Si el atajo no existe (pod reiniciado): python3 /workspace/frutinovelas-kit/scripts/fruti_remote.py start
 Guía completa: docs/RUNPOD.md del repositorio.

@@ -10,6 +10,9 @@ import { useToast } from './Toast'
 import { GenerationPanel } from './GenerationPanel'
 import { PromptCheck } from './PromptCheck'
 import { SceneImagePanel } from './SceneImagePanel'
+import { audioDrafts, audioErrors, audioInputs, nextAudioStart, voiceDrafts, voiceErrors, type AudioDraft, type VoiceDraft } from '../audio'
+import { SceneAudio } from './SceneAudio'
+import { SceneVoices } from './SceneVoices'
 
 type Draft = {
   title: string
@@ -23,6 +26,8 @@ type Draft = {
   imagePrompt: string
   characterIds: string[]
   imageApproval: 'manual' | 'automatic'
+  audioGuides: AudioDraft[]
+  voices: VoiceDraft[]
 }
 
 const fromScene = (s: Scene): Draft => ({
@@ -37,6 +42,8 @@ const fromScene = (s: Scene): Draft => ({
   imagePrompt: s.parameters.image_prompt ?? '',
   characterIds: s.parameters.character_ids ?? [],
   imageApproval: s.parameters.image_approval ?? 'manual',
+  audioGuides: audioDrafts(s.parameters.audio_guides),
+  voices: voiceDrafts(s.parameters.voice_character_ids, s.parameters.voice_references),
 })
 
 const ratio = (a: Asset | null) => (a?.width && a?.height ? a.width / a.height : null)
@@ -60,10 +67,12 @@ export function SceneEditor({ scene, projectId, index, onDirtyChange, onDuplicat
   const [showHistory, setShowHistory] = useState(false)
   const [startUploading, setStartUploading] = useState(false)
   const [endUploading, setEndUploading] = useState(false)
+  const [audioUploading, setAudioUploading] = useState(false)
   const [showImages, setShowImages] = useState(false)
+  const [showAudio, setShowAudio] = useState(false)
   const characters = useQuery({ queryKey: ['characters', projectId],
-    queryFn: ({ signal }) => api.characters(projectId!, signal), enabled: !!projectId && showImages })
-  const uploading = startUploading || endUploading
+    queryFn: ({ signal }) => api.characters(projectId!, signal), enabled: !!projectId && (showImages || showAudio) })
+  const uploading = startUploading || endUploading || audioUploading
 
   // Si la escena cambia desde fuera (otro guardado, MCP) y no hay cambios locales, sincroniza.
   // Con cambios locales se conserva la revisión base, así el guardado responde 409 en vez de sobrescribir.
@@ -83,6 +92,9 @@ export function SceneEditor({ scene, projectId, index, onDirtyChange, onDuplicat
   const duration = Number(draft.duration.replace(',', '.'))
   const durationOk = Number.isFinite(duration) && duration >= 0.5 && duration <= 60
   const seedOk = draft.seedMode === 'random' || (/^\d+$/.test(draft.seed) && Number.isSafeInteger(Number(draft.seed)))
+  const audioValidation = audioErrors(draft.audioGuides, duration)
+  const voiceValidation = voiceErrors(draft.voices)
+  const audioModeConflict = draft.voices.length > 0 && draft.audioGuides.length > 0
   const mode = draft.start ? (draft.end ? 'FL2VA' : 'I2VA') : null
   const ratioMismatch = draft.start && draft.end && Math.abs((ratio(draft.start) ?? 0) - (ratio(draft.end) ?? 0)) > 0.01
   const hasPicture2 = /<\s*picture\s*2\s*>/i.test(draft.prompt)
@@ -104,7 +116,9 @@ export function SceneEditor({ scene, projectId, index, onDirtyChange, onDuplicat
       if (duration !== base.duration_seconds) payload.duration_seconds = duration
       if (draft.start?.id !== clean.start?.id) payload.start_asset_id = draft.start?.id ?? null
       if (draft.end?.id !== clean.end?.id) payload.end_asset_id = draft.end?.id ?? null
-      if (draft.seedMode !== clean.seedMode || draft.seed !== clean.seed || draft.imagePrompt !== clean.imagePrompt || draft.imageApproval !== clean.imageApproval || JSON.stringify(draft.characterIds) !== JSON.stringify(clean.characterIds)) {
+      const audioChanged = JSON.stringify(draft.audioGuides) !== JSON.stringify(clean.audioGuides)
+      const voicesChanged = JSON.stringify(draft.voices) !== JSON.stringify(clean.voices)
+      if (draft.seedMode !== clean.seedMode || draft.seed !== clean.seed || draft.imagePrompt !== clean.imagePrompt || draft.imageApproval !== clean.imageApproval || JSON.stringify(draft.characterIds) !== JSON.stringify(clean.characterIds) || audioChanged || voicesChanged) {
         payload.parameters = {
           ...base.parameters,
           seed_mode: draft.seedMode,
@@ -112,6 +126,8 @@ export function SceneEditor({ scene, projectId, index, onDirtyChange, onDuplicat
           image_prompt: draft.imagePrompt,
           character_ids: draft.characterIds,
           image_approval: draft.imageApproval,
+          ...(audioChanged ? { audio_guides: audioInputs(draft.audioGuides) } : {}),
+          ...(voicesChanged ? { voice_character_ids: draft.voices.map((voice) => voice.characterId) } : {}),
         }
       }
       return api.updateScene(scene.id, payload as { expected_revision: number })
@@ -139,7 +155,7 @@ export function SceneEditor({ scene, projectId, index, onDirtyChange, onDuplicat
 
   useEffect(() => onDirtyChange(dirty || save.isPending || uploading), [dirty, save.isPending, uploading, onDirtyChange])
 
-  const canSave = dirty && durationOk && seedOk && !uploading && !save.isPending && !(draft.end && !draft.start)
+  const canSave = dirty && durationOk && seedOk && !audioValidation.length && !voiceValidation.length && !audioModeConflict && !uploading && !save.isPending && !(draft.end && !draft.start)
   const onImageApplied = useCallback((s: Scene) => {
     setBase(s)
     setDraft((current) => {
@@ -357,6 +373,38 @@ export function SceneEditor({ scene, projectId, index, onDirtyChange, onDuplicat
         </span>
       </div>
 
+      <details className="advanced scene-audio" onToggle={(e) => setShowAudio(e.currentTarget.open)}>
+        <summary>3 · Audio y voces{draft.voices.length ? ` · ${draft.voices.length} ${draft.voices.length === 1 ? 'voz' : 'voces'}` : draft.audioGuides.length ? ` · ${draft.audioGuides.length} ${draft.audioGuides.length === 1 ? 'audio' : 'audios'}` : ' · opcional'}{audioValidation.length || voiceValidation.length || audioModeConflict ? ' · revisar' : ''}</summary>
+        <div className="adv-body">
+          {projectId && <Link to={`/proyectos/${projectId}`}>Abrir las voces de la biblioteca de personajes</Link>}
+          {showAudio && characters.isError && <p role="alert">No se pudieron cargar las voces de los personajes. <button className="btn btn-sm" onClick={() => characters.refetch()}>Reintentar</button></p>}
+          {showAudio && <SceneVoices voices={draft.voices} available={characters.data ?? []} savedVoices={clean.voices}
+            errors={voiceValidation} disabled={audioUploading} hasPreparedAudio={draft.audioGuides.length > 0}
+            loading={characters.isLoading}
+            onToggle={(voice) => setDraft((d) => {
+              const selected = d.voices.some((chosen) => chosen.characterId === voice.characterId)
+              if (audioUploading || (!selected && (d.audioGuides.length > 0 || d.voices.length >= 3))) return d
+              return { ...d, voices: selected ? d.voices.filter((chosen) => chosen.characterId !== voice.characterId) : [...d.voices, voice] }
+            })}
+            onClearAudio={() => { if (!audioUploading) set('audioGuides', []) }} />}
+          {audioModeConflict && <p className="notice warn" role="alert">Elige voces de los personajes o audios preparados. Quita una de las dos selecciones antes de guardar.</p>}
+          <section className="scene-audio-manual" aria-label="Audio preparado">
+            <h3>Audio preparado · alternativa</h3>
+            {draft.voices.length > 0 && <div className="notice"><div>
+              <p style={{ marginTop: 0 }}>Ya elegiste voces para generar diálogos nuevos. Para usar un diálogo grabado, quita primero esas voces de esta escena.</p>
+              <button type="button" className="btn btn-sm" disabled={audioUploading} onClick={() => set('voices', [])}>Quitar voces para usar audio preparado</button>
+            </div></div>}
+            <SceneAudio guides={draft.audioGuides} characters={characters.data ?? []} errors={audioValidation} disabled={draft.voices.length > 0}
+              onUpdate={(index, data) => setDraft((d) => ({ ...d, audioGuides: d.audioGuides.map((g, i) => i === index ? { ...g, ...data } : g) }))}
+              onRemove={(index) => setDraft((d) => ({ ...d, audioGuides: d.audioGuides.filter((_g, i) => i !== index) }))}
+              onAdd={(asset) => setDraft((d) => d.voices.length > 0 || d.audioGuides.length >= 8 ? d : ({ ...d, audioGuides: [...d.audioGuides, {
+                assetId: asset.id, asset, characterId: '', characterName: '', voiceDescription: '', start: nextAudioStart(d.audioGuides),
+              }] }))}
+              onBusyChange={setAudioUploading} />
+          </section>
+        </div>
+      </details>
+
       <details className="advanced">
         <summary>
           <ChevronRight size={15} /> Notas internas de la escena
@@ -388,7 +436,8 @@ export function SceneEditor({ scene, projectId, index, onDirtyChange, onDuplicat
                   <div className="subtle" style={{ marginBottom: 4 }}>
                     {new Date(r.created_at + (r.created_at.endsWith('Z') ? '' : 'Z')).toLocaleString('es')} ·{' '}
                     {r.duration_seconds} s · {r.end_asset_id ? 'FL2VA' : r.start_asset_id ? 'I2VA' : 'sin imagen'} ·{' '}
-                    {r.author.toUpperCase()}
+                    {r.author.toUpperCase()}{r.parameters.audio_guides?.length ? ` · ${r.parameters.audio_guides.length} audio${r.parameters.audio_guides.length === 1 ? '' : 's'}` : ''}
+                    {r.parameters.voice_character_ids?.length ? ` · ${r.parameters.voice_character_ids.length} ${r.parameters.voice_character_ids.length === 1 ? 'voz' : 'voces'}` : ''}
                   </div>
                   <pre>{r.prompt || '(sin prompt)'}</pre>
                 </div>
@@ -441,7 +490,7 @@ export function SceneEditor({ scene, projectId, index, onDirtyChange, onDuplicat
       {confirmDelete && (
         <ConfirmDialog
           title="¿Eliminar esta escena?"
-          text={`Se eliminará «${base.title || `Escena ${index + 1}`}» con su historial de revisiones. Las imágenes subidas se conservan en el almacenamiento.`}
+          text={`Se eliminará «${base.title || `Escena ${index + 1}`}» con su historial de revisiones. Las imágenes y los audios subidos se conservan en el almacenamiento.`}
           confirmText="Eliminar escena"
           danger
           onConfirm={() => remove.mutateAsync()}

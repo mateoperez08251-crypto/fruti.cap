@@ -24,6 +24,9 @@ EMBEDDED = [
     ("scripts/comfy_gateway.py", ROOT / "scripts" / "comfy_gateway.py"),
     ("config/models_manifest.lock.json", ROOT / "config" / "models_manifest.lock.json"),
     ("config/workflow_profiles.json", ROOT / "config" / "workflow_profiles.json"),
+    ("src/frutinovelas/__init__.py", ROOT / "src" / "frutinovelas" / "__init__.py"),
+    ("src/frutinovelas/services/__init__.py", ROOT / "src" / "frutinovelas" / "services" / "__init__.py"),
+    ("src/frutinovelas/services/voice_workflow.py", ROOT / "src" / "frutinovelas" / "services" / "voice_workflow.py"),
 ]
 
 # --------------------------------------------------------------------------- celdas
@@ -37,11 +40,11 @@ de forma segura para que **FRUTINOVELAS Studio** (que corre en tu PC) lo use com
 | Celda | Acción |
 |---|---|
 | 1 | Configuración (perfil, Drive, túnel) |
-| 1.1–1.6 | Escribe los archivos del kit (scripts, manifiesto, perfiles y tu flujo exacto) |
+| Archivos del kit | Escribe scripts, manifiesto, perfiles y tu flujo exacto |
 | 2 | Diagnóstico de GPU, VRAM, RAM y disco |
 | 3 | Instala ComfyUI fijado al commit `3541246` + dependencias |
 | 4–5 | Plan de modelos y descarga verificada (tamaño + SHA-256, revisiones fijadas) |
-| 6 | Prepara los flujos (tu H3 + plantillas Qwen opcionales) |
+| 6 | Prepara los flujos (tu H3 + voces Ref2VA y plantillas Qwen opcionales) |
 | 7 / 7B | Arranca ComfyUI, **exporta a formato API automáticamente** y valida contra el servidor real |
 | 8 | Gateway con token + túnel Cloudflare |
 | 9 / 9B | Datos de conexión para el programa (URL) y token (paso privado) |
@@ -57,6 +60,15 @@ de forma segura para que **FRUTINOVELAS Studio** (que corre en tu PC) lo use com
    - `CF_TUNNEL_TOKEN` y `CF_TUNNEL_HOSTNAME`: solo si usas un túnel con nombre de Cloudflare (URL estable).
 3. Ejecuta las celdas **una a una, en orden**. Las celdas 10 y 11 tienen casillas desactivadas por defecto.
 
+**ACTIVAR_VOCES_PERSONAJES viene activado** para generar diálogo nuevo con una muestra guardada por personaje.
+Añade el checkpoint Ref2VA INT8 (20,97 GB) y reutiliza el encoder y los VAEs H3 del perfil seleccionado.
+La celda 4 muestra el espacio total antes de descargar. Puedes desactivar la opción si esta sesión no usará voces.
+En Studio, guarda una muestra por personaje y selecciona sus voces en cada escena; no subas el diálogo completo.
+Las muestras admiten 2–15 s cada una, hasta tres voces y 15 s en total por escena.
+Actualiza Studio y su MCP a la misma versión del repositorio antes de conectar esta libreta.
+El catálogo de estilos vive en Studio: el estilo angulado y geométrico solo se aplica al pedirlo,
+y entonces la IA consulta referencias en internet mediante las herramientas de su cliente.
+
 > ⚠️ **Avisos importantes**
 > - Las [condiciones de Colab](https://research.google.com/colaboratory/faq.html) restringen en el plan gratuito el uso principal mediante interfaces web remotas y los proxies remotos. Se recomienda **plan de pago con saldo de cómputo**. Esta libreta **no** usa autoclic ni trucos anti-inactividad: mantén la pestaña abierta.
 > - Un *Quick Tunnel* de Cloudflare es para pruebas: la URL cambia en cada sesión.
@@ -66,6 +78,7 @@ de forma segura para que **FRUTINOVELAS Studio** (que corre en tu PC) lo use com
 
 CONFIG_HEAD_COLAB = r'''# @title 1 · Configuración
 PERFIL_VIDEO = "h3_balanced_default"  # @param ["h3_balanced_default", "h3_quality_bf16_optional"]
+ACTIVAR_VOCES_PERSONAJES = True  # @param {type:"boolean"}
 ACTIVAR_QWEN_2512_T2I = False  # @param {type:"boolean"}
 QWEN_EDIT_2511 = "no"  # @param ["no", "fp8mixed", "bf16"]
 USAR_DRIVE = True  # @param {type:"boolean"}
@@ -107,7 +120,7 @@ PIP_MARKER = COMFY_DIR / ".frutinovelas_pip_ok"
 '''
 
 CONFIG_COMMON = r'''
-NOTEBOOK_VERSION = "1.1.0"
+NOTEBOOK_VERSION = "1.2.0"
 COMFY_REPO = "https://github.com/Comfy-Org/ComfyUI.git"
 COMFY_TAG = "v0.40.0"
 COMFY_COMMIT = "3541246a9c997f4b8c32f9f88f3c985d02021c79"
@@ -122,6 +135,7 @@ LOG_DIR = DATA_DIR / "logs"
 UI_PATH = KIT_DIR / "workflows" / "H3_EQUILIBRADO_9x16_INICIO_FINAL.ui.json"
 
 for d in [KIT_DIR / "scripts", KIT_DIR / "config", KIT_DIR / "workflows" / "templates", KIT_DIR / "bin",
+          KIT_DIR / "src" / "frutinovelas" / "services",
           DATA_DIR / "workflows", API_DIR, DATA_DIR / "secrets", DATA_DIR / "tests",
           DATA_DIR / "comfy_input", DATA_DIR / "comfy_output", LOG_DIR, MODELS_DIR] + ([PERSIST_DIR] if PERSIST_DIR else []):
     d.mkdir(parents=True, exist_ok=True)
@@ -183,15 +197,23 @@ def cargar_kit():
 
     if str(KIT_DIR / "scripts") not in sys.path:
         sys.path.insert(0, str(KIT_DIR / "scripts"))
+    if str(KIT_DIR / "src") not in sys.path:
+        sys.path.insert(0, str(KIT_DIR / "src"))
     import validate_workflows
 
     importlib.reload(validate_workflows)
+    # Si se reescribió el kit en esta sesión, usar el helper actualizado.
+    voice_module = sys.modules.get("frutinovelas.services.voice_workflow")
+    if voice_module is not None:
+        importlib.reload(voice_module)
     manifest = json.loads((KIT_DIR / "config" / "models_manifest.lock.json").read_text())
     profile = validate_workflows.load_profile(KIT_DIR / "config" / "workflow_profiles.json", H3_PROFILE_KEY)
     return manifest, profile, validate_workflows
 
 
 PERFILES_ACTIVOS = [PERFIL_VIDEO]
+if ACTIVAR_VOCES_PERSONAJES:
+    PERFILES_ACTIVOS.append("h3_voice_references")
 if ACTIVAR_QWEN_2512_T2I:
     PERFILES_ACTIVOS.append("qwen2512_t2i")
 if QWEN_EDIT_2511 != "no":
@@ -562,6 +584,32 @@ for modo, grafo in variantes.items():
         print(f"✅ {nombre} ({len(grafo_final)} nodos)")
     errores_totales += errores
 
+if ACTIVAR_VOCES_PERSONAJES:
+    from frutinovelas.services.voice_workflow import VOICE_WORKFLOW, derive_voice_workflow, validate_voice_node_info
+
+    # Mantener ambos extremos visuales en el flujo publicado. Studio conecta las voces reales.
+    base_voz, cambios = vw.apply_loader_overrides(crudo, overrides)
+    unet = Path(MANIFEST["components"]["h3_diffusion_ref2va_pruned_int8"]["path"]).name
+    try:
+        validate_voice_node_info(OBJECT_INFO)
+        voz = derive_voice_workflow(base_voz, unet)
+        rv = vw.validate_api_graph(voz, OBJECT_INFO)
+    except ValueError as exc:
+        rv = {"errors": [str(exc)], "warnings": []}
+    for a in rv["warnings"]:
+        print("  [voces] aviso:", a)
+    for e in rv["errors"]:
+        print("  [voces] ERROR:", e)
+    if not rv["errors"]:
+        destino = API_DIR / VOICE_WORKFLOW
+        destino.write_text(json.dumps(voz, ensure_ascii=False, indent=2), encoding="utf-8")
+        INFORME["flujos"][VOICE_WORKFLOW] = {
+            "modo": "ref2va", "perfil": "h3_voice_references", "nodos": len(voz),
+            "sha256": sha_json(destino), "cambios_perfil": cambios, "avisos": rv["warnings"],
+        }
+        print(f"✅ {VOICE_WORKFLOW} ({len(voz)} nodos; muestras por personaje desde Studio)")
+    errores_totales += rv["errors"]
+
 NOMBRES_QWEN = {"qwen2512_t2i": "QWEN_2512_T2I.api.json", "qwen_edit2511_fp8mixed": "QWEN_EDIT_2511.api.json",
                 "qwen_edit2511_bf16": "QWEN_EDIT_2511.api.json"}
 for perfil, plantilla in TEMPLATES.items():
@@ -638,8 +686,11 @@ def escribir_identidad(extra=None):
     anterior = DATA_DIR / "identity.json"
     if anterior.exists():
         viejo = json.loads(anterior.read_text())
-        ident["pruebas"] = viejo.get("pruebas", {})
-        ident["estado_compatibilidad"] = viejo.get("estado_compatibilidad", ident["estado_compatibilidad"])
+        misma_configuracion = all(viejo.get(k) == ident.get(k) for k in
+                                  ("comfyui_commit", "perfiles", "modelos", "workflows", "workflow_ui_sha256"))
+        if misma_configuracion:
+            ident["pruebas"] = viejo.get("pruebas", {})
+            ident["estado_compatibilidad"] = viejo.get("estado_compatibilidad", ident["estado_compatibilidad"])
     ident.update(extra or {})
     anterior.write_text(json.dumps(ident, ensure_ascii=False, indent=2))
     return ident
@@ -986,8 +1037,12 @@ else:
 
 STEPS_MD = """## Conectar FRUTINOVELAS Studio (en tu PC)
 
-1. Copia la **URL** de la celda 9 y el **token** de la celda 9B.
-2. Comprueba la conexión desde el PC (PowerShell, dentro de `frutinovelas-studio`):
+1. Actualiza el código de **Studio y MCP** a la misma versión que esta libreta.
+   Abre `iniciar.cmd` en tu PC y reinicia el proceso MCP si estaba abierto.
+2. Copia la **URL** de la celda 9 y el **token** de la celda 9B. En Studio abre
+   **Conexión ComfyUI**, pega ambos y pulsa **Guardar y comprobar**. Studio verifica
+   la identidad del gateway y el hash del flujo; no hace falta importar JSON a mano.
+3. Para un diagnóstico opcional desde PowerShell, dentro de `frutinovelas-studio`:
 
    ```powershell
    $env:FRUTI_COMFY_TOKEN = "PEGA_AQUI_EL_TOKEN"
@@ -995,8 +1050,20 @@ STEPS_MD = """## Conectar FRUTINOVELAS Studio (en tu PC)
    ```
 
    Descarga los flujos API exportados a `workflows/api/` y verifica sus SHA-256.
-3. En el programa: **Conexiones → ComfyUI** → pega URL y token → **Probar** → **Importar flujo**.
-4. {reconexion}
+4. Si activaste voces, la exportación de la celda 7B debe incluir
+   `H3_VOZ_PERSONAJES.api.json`. Guarda una muestra por personaje en la biblioteca,
+   selecciona sus voces en **Audio y voces**, escribe los diálogos nuevos y guarda
+   la escena. Se puede usar una imagen inicial o también una final.
+5. La IA puede leer `docs/ESTILOS_VISUALES.md` por el recurso MCP
+   `frutinovelas://guides/visual-styles`; `get_directing_guidance` lo incorpora para
+   imagen, animación y revisión. **Leerlo no selecciona el estilo**: úsalo solo por
+   petición expresa. La búsqueda en internet corresponde a la IA conectada, no a
+   este servidor de inferencia.
+6. {reconexion}
+
+Guardar prompts, estilos y muestras no inicia una inferencia. Al generar el primer
+clip, revisa la imagen, los diálogos y la voz; las pruebas automáticas y la exportación
+del grafo no miden la calidad generada.
 """
 
 STEPS_VARS = {
@@ -1053,7 +1120,7 @@ def ui_cell() -> dict:
     if "\r" in text or "'''" in text or text.endswith("\\"):
         raise SystemExit("El flujo no se puede incrustar como cadena literal sin alterarlo.")
     body = (
-        "# @title 1.6 · Tu flujo H3 (copia exacta; se verifica con SHA-256)\n"
+        "# @title Tu flujo H3 (copia exacta; se verifica con SHA-256)\n"
         "import hashlib\n\n"
         f"UI_SHA256 = \"{sha}\"\n"
         f"UI_TEXT = r'''{text}'''\n"
@@ -1069,7 +1136,7 @@ def ui_cell() -> dict:
 def build(platform: str) -> dict:
     p = PLATFORMS[platform]
     cells = [md(p["intro"]), md("## 1 · Configuración"), code(p["config_head"] + CONFIG_COMMON),
-             md("### 1.1–1.6 · Archivos del kit\nScripts y configuración del repositorio FRUTINOVELAS Studio, escritos tal cual. "
+             md("### Archivos del kit\nScripts y configuración del repositorio FRUTINOVELAS Studio, escritos tal cual. "
                 "No hace falta tocarlos.")]
     for rel, src in EMBEDDED:
         cells.append(writefile_cell(rel, src, p["kit"]))

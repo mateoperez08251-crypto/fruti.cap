@@ -77,6 +77,8 @@ def store_image(session: Session, settings: Settings, stream: BinaryIO, original
 
         sha = digest.hexdigest()
         existing = session.scalar(select(Asset).where(Asset.sha256 == sha))
+        if existing is not None and existing.kind != "image":
+            raise AssetError("El archivo no es una imagen. Usa la carga de audio para las voces.")
         if existing is not None and (settings.resolved_data_dir / existing.rel_path).is_file():
             return existing
 
@@ -119,6 +121,8 @@ def asset_path(settings: Settings, asset: Asset) -> Path:
 
 def thumbnail_path(settings: Settings, asset: Asset, size: int) -> Path:
     """Miniatura WebP en caché; el original permanece intacto."""
+    if asset.kind != "image":
+        raise AssetError("Solo las imágenes tienen miniatura.")
     size = max(64, min(size, 1024))
     out = settings.cache_dir / "thumbs" / f"{asset.sha256}-{size}.webp"
     if out.is_file():

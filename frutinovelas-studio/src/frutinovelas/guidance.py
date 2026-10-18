@@ -11,12 +11,14 @@ GUIDES = {
     "director-core": ("DIRECTOR_CORE.md", "Dirección general para cualquier sujeto o escena"),
     "preferences": ("FRUTINOVELAS_PREFERENCES.md", "Preferencias habituales de frutinovelas"),
     "visual-direction": ("VISUAL_DIRECTION.md", "Luz, sombras, actuación, física y cámara"),
+    "visual-styles": ("ESTILOS_VISUALES.md", "Estilos opcionales, solo bajo petición: angulado y geométrico (Mignola & Y2K)"),
     "models": ("MODEL_COMPATIBILITY.md", "Capacidades reales de los perfiles del repositorio"),
     "scene-timing": (
         "GUIA_ESCENAS_Y_DURACION.md",
         "Duración por prompt, diálogo, cámaras y fotogramas inicio/final",
     ),
     "scene-workflow": ("PERSONAJES_Y_ESCENAS.md", "Biblioteca, preparación y generación manual/automática"),
+    "voices": ("AUDIO_Y_VOCES.md", "Muestras reutilizables por personaje y diálogos nuevos con H3 Ref2VA"),
     "usage": ("PROMPT_STUDIO.md", "CLI, API, MCP y esquemas de prompts"),
     "research": ("PROMPT_RESEARCH.md", "Fuentes primarias y alcance de la investigación"),
     "chatgpt-director": ("CHATGPT_DIRECTOR.md", "Instrucciones portables para un chat"),
@@ -64,6 +66,8 @@ def get_guidance(
     if include_example_story and preset != "frutinovelas":
         raise ValueError("La historia de ejemplo pertenece al preset frutinovelas.")
     keys = ["director-core", "visual-direction", "models", f"skill-{task}"]
+    if task in ("image", "animation", "review"):
+        keys.append("visual-styles")
     if task in ("story", "animation", "review"):
         keys.append("scene-timing")
     if preset == "frutinovelas":
@@ -75,6 +79,7 @@ def get_guidance(
         "preset": preset,
         "scope": (
             "Aplicar a la escena actual. Los ejemplos ilustran técnicas; no imponen personajes ni eventos. "
+            "Leer el catálogo visual no activa un estilo: aplicarlo solo si el usuario lo pide expresamente y consultar entonces referencias en internet. "
             "En preset general usar los sujetos, estilo, idioma y sonido solicitados. "
             "Si se compila H3Draft, sobrescribir visual_style, language y non_diegetic_music cuando proceda; "
             "sus valores predeterminados no son decisiones creativas universales."

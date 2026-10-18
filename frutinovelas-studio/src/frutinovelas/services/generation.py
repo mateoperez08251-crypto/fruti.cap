@@ -5,17 +5,25 @@ from __future__ import annotations
 import copy
 import secrets
 
+import httpx
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
 from frutinovelas.models import ComfyConnection, GenerationJob, utcnow
 from frutinovelas.services import scenes
-from frutinovelas.services.comfy import ComfyError, cipher
+from frutinovelas.services.audio_workflow import AudioWorkflowError, effective_audio_prompt, validate_audio_guides
+from frutinovelas.services.comfy import ComfyClient, ComfyError, cipher, identity_key
+from frutinovelas.services.voice_workflow import (
+    VOICE_WORKFLOW,
+    VoiceWorkflowError,
+    effective_voice_prompt,
+    validate_voice_references,
+)
 
 ACTIVE = ("queued", "uploading", "submitting", "waiting", "running", "downloading", "unknown")
 
 
-def enqueue(session, scene_id, expected_revision, request_id):
+def enqueue(session, scene_id, expected_revision, request_id, client_factory=None):
     scene = scenes.load_scene(session, scene_id)
     existing = session.get(GenerationJob, request_id)
     if existing:
@@ -43,6 +51,21 @@ def enqueue(session, scene_id, expected_revision, request_id):
     if connection is None:
         raise ComfyError("Configura y comprueba la conexión con RunPod en «Conexión ComfyUI».")
     params = rev.parameters or {}
+    audio_guides = copy.deepcopy(params.get("audio_guides", []))
+    voice_references = copy.deepcopy(params.get("voice_references", []))
+    try:
+        validate_audio_guides(audio_guides, rev.duration_seconds)
+        validate_voice_references(voice_references)
+        if params.get("voice_character_ids", []) != [reference["character_id"] for reference in voice_references]:
+            raise VoiceWorkflowError("Vuelve a guardar la selección de voces antes de generar.")
+        if voice_references and audio_guides:
+            raise VoiceWorkflowError("Elige voces de personajes o audios guía para esta escena, no ambos modos.")
+        effective_prompt = (
+            effective_voice_prompt(rev.prompt, voice_references, end_frame=bool(rev.end_asset_id))
+            if voice_references else effective_audio_prompt(rev.prompt, audio_guides)
+        )
+    except (AudioWorkflowError, VoiceWorkflowError) as exc:
+        raise ComfyError(str(exc)) from exc
     seed = params.get("seed") if params.get("seed_mode") == "fixed" else secrets.randbelow(2**53)
     if type(seed) is not int or not 0 <= seed < 2**53:
         raise ComfyError("La semilla debe ser un entero entre 0 y 9007199254740991.")
@@ -50,6 +73,9 @@ def enqueue(session, scene_id, expected_revision, request_id):
         revision_number=rev.number,
         scene_revision=scene.revision,
         prompt=rev.prompt,
+        effective_prompt=effective_prompt,
+        audio_guides=audio_guides,
+        voice_references=voice_references,
         start_asset_id=rev.start_asset_id,
         end_asset_id=rev.end_asset_id,
         duration=rev.duration_seconds,
@@ -58,6 +84,44 @@ def enqueue(session, scene_id, expected_revision, request_id):
         identity=copy.deepcopy(connection.identity),
         graph=copy.deepcopy(connection.workflow),
     )
+    encrypted = connection.encrypted_token
+    if voice_references:
+        token = connection_token(connection)
+        saved_identity_key = identity_key(snapshot["identity"])
+        # Release SQLite during remote reads, then check both revision and
+        # connection again. The prompt, samples and credentials above are frozen.
+        session.rollback()
+        client = (client_factory or ComfyClient)(snapshot["url"], token)
+        try:
+            identity, graph = client.load_voice_workflow(snapshot["identity"])
+        except VoiceWorkflowError as exc:
+            raise ComfyError(str(exc)) from exc
+        except httpx.HTTPError as exc:
+            raise ComfyError("No se pudo comprobar el flujo de voces. Revisa la conexión con RunPod.") from exc
+        finally:
+            client.close()
+        session.expire_all()
+        existing = session.get(GenerationJob, request_id)
+        if existing:
+            if existing.kind != "video" or existing.scene_id != scene_id or existing.snapshot["scene_revision"] != expected_revision:
+                raise ComfyError("El ID de petición pertenece a otra escena u operación.")
+            return existing
+        fresh = scenes.load_scene(session, scene_id)
+        if fresh.revision != expected_revision:
+            raise scenes.Conflict(fresh.revision)
+        current_connection = session.get(ComfyConnection, "default")
+        if (
+            current_connection is None or current_connection.url != snapshot["url"]
+            or current_connection.encrypted_token != encrypted
+            or identity_key(current_connection.identity) != saved_identity_key
+        ):
+            raise ComfyError("La conexión cambió mientras se comprobaban las voces. Vuelve a generar desde la escena guardada.")
+        existing = session.scalar(select(GenerationJob).where(GenerationJob.active_scene_id == scene_id))
+        if existing:
+            if existing.kind != "video":
+                raise ComfyError("Esta escena tiene una imagen en generación. Espera a que termine.")
+            return existing
+        snapshot.update(identity=identity, graph=graph, workflow=VOICE_WORKFLOW)
     job = GenerationJob(
         id=request_id,
         prompt_id=request_id,
@@ -65,7 +129,7 @@ def enqueue(session, scene_id, expected_revision, request_id):
         active_scene_id=scene_id,
         state="queued",
         snapshot=snapshot,
-        encrypted_token=connection.encrypted_token,
+        encrypted_token=encrypted,
     )
     try:
         session.add(job)

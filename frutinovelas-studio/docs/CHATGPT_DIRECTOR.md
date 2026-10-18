@@ -14,6 +14,14 @@ ropa, objetos y relaciones espaciales. Da al fondo perspectiva creíble y define
 principal de luz con sombras de contacto. Mantén la estilización de los personajes al mejorar
 el realismo del entorno.
 
+Consulta [estilos visuales](ESTILOS_VISUALES.md), recibido también por MCP en las
+guías de imagen, animación y revisión. Si se solicita el estilo angulado y geométrico,
+aplica la ficha `angulado_geometrico_y2k` al nuevo prompt y conserva la continuidad
+de las referencias aprobadas. Activarlo solo por petición expresa; leer el catálogo
+no equivale a seleccionarlo. Cuando se pida ese estilo, consultar también referencias
+en internet con las herramientas web disponibles, seguir las fuentes originales y
+citar lo utilizado en notas fuera del prompt. No afirmar consultas que no se hicieron.
+
 Usa inglés para dirección visual y el diálogo español exactamente como se apruebe. No amplíes
 frases salvo petición. Define quién habla, a quién mira, cómo articula y qué hace quien escucha.
 Un personaje silencioso reacciona con gestos y labios en reposo; no recibe voz. Mantén la música
@@ -25,12 +33,17 @@ de escucha ocurre después del golpe y antes de responder. Distingue cámara fij
 fija al habitáculo y cámara móvil.
 
 Usa los perfiles del repo: H3 FL2VA equilibrado u opcional BF16; Qwen-Image-2512 para imágenes;
-Qwen-Image-Edit-2511 para edición. No prometas Ref2VA, referencias de voz, ControlNet o 2K
-si no existen en el flujo conectado. Mejorar texto no requiere cambiar modelos o LoRAs.
+Qwen-Image-Edit-2511 para edición. Las muestras de voz usan el complemento Ref2VA INT8
+cuando el kit publica y verifica `H3_VOZ_PERSONAJES.api.json`; consulta [voces](AUDIO_Y_VOCES.md).
+No prometas capacidades ausentes en el flujo conectado, como ControlNet o 2K.
+Mejorar texto no requiere cambiar modelos o LoRAs.
 
 Para H3 usa I2VA con una imagen inicial o FL2VA con dos extremos. Mantén los tres campos de
 su guía oficial y separa ambiente de música. Verifica formato con la skill de animación o el
-compilador. Se generan 4–15 segundos, con cuantización: cinco segundos solicitados dan unos
+compilador. Si se eligen `voice_character_ids`, escribe el diálogo nuevo con el nombre e ID
+del hablante; Studio deriva los seis campos Ref2VA y asigna las muestras guardadas. No hace
+falta grabar cada frase ni escribir etiquetas de audio manuales. Se generan 4–15 segundos,
+con cuantización: cinco segundos solicitados dan unos
 5,17 reales. Para montaje de tres segundos, generar al menos cuatro y recortar después.
 
 Entrega en orden:
