@@ -301,11 +301,6 @@ def create_app(
         log.info("%s %s -> %s (%.2fs)", method, path, up.status, time.monotonic() - started)
         return resp
 
-    if narration_dir is not None:
-        from narrated_gateway import NarrationStore, configure_narration
-        # Register before the catch-all ComfyUI proxy. Jobs and data stay remote.
-        app.on_startup.append(lambda app_: configure_narration(app_, narration_dir, comfy_output_dir))
-
     app.router.add_get("/healthz", healthz)
     app.router.add_get("/frutinovelas/identity", identity)
     app.router.add_get("/frutinovelas/workflows", list_workflows)
@@ -313,7 +308,7 @@ def create_app(
     if narration_dir is not None:
         # route registration must occur before application startup and before catch-all
         from narrated_gateway import register_narration_routes
-        register_narration_routes(app)
+        register_narration_routes(app, narration_dir, comfy_output_dir)
     app.router.add_route("*", "/{tail:.*}", proxy)
     return app
 
