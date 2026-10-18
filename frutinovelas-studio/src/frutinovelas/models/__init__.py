@@ -217,3 +217,25 @@ class ImageImportRequest(Base):
     fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     asset_id: Mapped[str] = mapped_column(ForeignKey("assets.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class NarratedVideo(TimestampMixin, Base):
+    """Audio-first video montage. Its shots keep ChatGPT image prompts and asset IDs."""
+
+    __tablename__ = "narrated_videos"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    audio_asset_id: Mapped[str] = mapped_column(ForeignKey("assets.id"))
+    title: Mapped[str] = mapped_column(String(200))
+    transcript: Mapped[str] = mapped_column(Text, default="")
+    aspect_ratio: Mapped[str] = mapped_column(String(5), default="9:16")
+    shots: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    state: Mapped[str] = mapped_column(String(24), default="draft")
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str] = mapped_column(Text, default="")
+    result_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    __mapper_args__ = {"version_id_col": revision, "version_id_generator": False}
+    audio_asset: Mapped[Asset] = relationship(foreign_keys=[audio_asset_id])
