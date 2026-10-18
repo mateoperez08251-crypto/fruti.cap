@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Trash2 } from 'lucide-react'
 import { memo, useEffect, useRef, useState } from 'react'
 import { api, thumbUrl, type Scene } from '../api'
 import { useToast } from './Toast'
@@ -31,6 +32,9 @@ export const SceneImagePanel = memo(function SceneImagePanel({ scene, dirty, onA
     onError: (e) => toast.error(e.message) })
   const abandon = useMutation({ mutationFn: api.abandonGeneration,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['image-generations', scene.id] }), onError: (e) => toast.error(e.message) })
+  const discard = useMutation({ mutationFn: api.discardGenerationOutput,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['image-generations', scene.id] }); toast.ok('Imagen descartada de Studio') },
+    onError: (e: Error) => toast.error(e.message) })
   return <section aria-label="Imágenes Qwen de esta escena" className="scene-images">
     <p className="hint">{scene.parameters.cast?.length ? 'Qwen Edit recibirá las referencias de los personajes en el orden guardado.' : 'Sin personajes seleccionados se utiliza Qwen desde texto.'} Las referencias se conservan completas; la composición se prepara en 576×1024.</p>
     <button className="btn btn-primary" id="btn-generate-image" disabled={dirty || !scene.parameters.image_prompt?.trim() || active || generate.isPending || jobs.isPending || jobs.isError} onClick={() => generate.mutate(false)}>{active ? 'Imagen en generación' : 'Generar imagen con Qwen'}</button>
@@ -43,7 +47,10 @@ export const SceneImagePanel = memo(function SceneImagePanel({ scene, dirty, onA
       <p className="hint">{j.references.map((r, i) => `${i + 1}: ${r.name}`).join(' · ')}</p>
       {j.result_asset_id && <><a href={j.result_url!} target="_blank" rel="noreferrer"><img src={thumbUrl(j.result_asset_id, 512)} alt="Resultado Qwen para revisar" loading="lazy" /></a>
         <button className="btn btn-sm" disabled={dirty || approve.isPending} onClick={() => approve.mutate({ id: j.id, role: 'start' })}>Aprobar y usar de inicio</button>
-        <button className="btn btn-sm" disabled={dirty || approve.isPending || !scene.start_asset} onClick={() => approve.mutate({ id: j.id, role: 'end' })}>Aprobar y usar de final</button></>}
+        <button className="btn btn-sm" disabled={dirty || approve.isPending || !scene.start_asset} onClick={() => approve.mutate({ id: j.id, role: 'end' })}>Aprobar y usar de final</button>
+        <button className="btn btn-sm" disabled={discard.isPending} onClick={() => {
+          if (window.confirm('Eliminar esta imagen generada? Las imagenes usadas como referencia se conservan.')) discard.mutate(j.id)
+        }}><Trash2 size={14}/> Descartar imagen</button></>
       {(j.state === 'queued' || j.state === 'unknown') && <button className="btn btn-sm" disabled={abandon.isPending} onClick={() => { if (window.confirm('Comprueba primero la cola remota. Cerrar este registro no detiene una generación ya enviada. ¿Cerrar?')) abandon.mutate(j.id) }}>Cerrar registro</button>}
     </article>)}</div>
     {jobs.data && jobs.data.length > count && <button className="btn btn-sm" onClick={() => setCount(count + 5)}>Ver imágenes anteriores</button>}
