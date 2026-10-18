@@ -1,7 +1,14 @@
 """Comprobaciones sin red para el túnel MCP público optativo."""
 from pathlib import Path
+import importlib.util
 
-from scripts.public_mcp_tunnel import commands, public_mcp_url
+_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "public_mcp_tunnel.py"
+_spec = importlib.util.spec_from_file_location("frutinovelas_public_mcp_tunnel", _SCRIPT)
+assert _spec is not None and _spec.loader is not None
+_module = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_module)
+commands = _module.commands
+public_mcp_url = _module.public_mcp_url
 
 
 def test_extracts_complete_https_mcp_url_from_cloudflared_log():
