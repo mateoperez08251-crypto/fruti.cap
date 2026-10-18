@@ -8,11 +8,12 @@ import secrets
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from frutinovelas.models import ComfyConnection, GenerationJob
+from frutinovelas.models import Asset, ComfyConnection, GenerationJob
 from frutinovelas.schemas import SceneUpdate
 from frutinovelas.services import scenes
 from frutinovelas.services.comfy import ComfyClient, ComfyError, identity_key
 from frutinovelas.services.generation import connection_token
+from frutinovelas.services.reference_prep import cast_contract, reference_preparation
 
 EDIT_WORKFLOW = "QWEN_EDIT_2511.api.json"
 T2I_WORKFLOW = "QWEN_2512_T2I.api.json"
@@ -69,12 +70,10 @@ def prepare_image_graph(graph, prompt, cast, seed, names, job_id):
     if len(cast) != len(names) or len(cast) > 2:
         raise ComfyError("No coinciden los personajes con las referencias subidas.")
     g = copy.deepcopy(graph)
-    positive = prompt
+    # The editor's literal prompt is preserved. Add deterministic, enforceable-looking
+    # cast constraints only to the effective graph submitted to Qwen.
+    positive = prompt + cast_contract(cast)
     if edit:
-        positive += "\n\nCharacter reference bindings (in this exact order):\n" + "\n".join(
-            f"Reference image {i}: {c['name']}. Preserve this character's identity and distinctive appearance. {c['description']}"
-            for i, c in enumerate(cast, 1)
-        )
         # Bind actual image tensors to both encoders; never leave template sample images attached.
         for i, name in enumerate(names, 1):
             id = f"fruti_reference_{i}"
@@ -215,6 +214,15 @@ def enqueue_image(
     cast = copy.deepcopy(parameters.get("cast", []))
     if parameters.get("character_ids", []) != [c["character_id"] for c in cast]:
         raise ComfyError("Vuelve a guardar la selección de personajes antes de generar.")
+    # Freeze a single frontal pose per reference image before remote submission.
+    # Original library assets and previously generated job snapshots remain unchanged.
+    for character in cast:
+        asset = session.get(Asset, character["asset_id"])
+        if not asset or asset.kind != "image" or asset.sha256 != character.get("sha256"):
+            raise ComfyError("La imagen original del personaje cambió o no está disponible.")
+        character["reference_preparation"] = reference_preparation(
+            asset.sha256, asset.original_name, asset.width, asset.height
+        )
     connection = session.get(ComfyConnection, "default")
     if not connection:
         raise ComfyError("Configura la conexión de ComfyUI antes de generar imágenes.")

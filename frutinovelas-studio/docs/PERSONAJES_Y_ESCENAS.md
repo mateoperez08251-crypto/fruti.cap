@@ -153,3 +153,31 @@ Tras un `git pull` hay que reiniciar Studio y el proceso MCP para que ChatGPT ve
 la nueva herramienta. El ejemplo de Capítulo 2 de detectives está en
 `examples/chapters/dario_capitulo_2.json` como propuesta creativa editable,
 no como hechos confirmados del Capítulo 1.
+
+## Evitar duplicados: referencias de una sola pose (preparación Qwen)
+
+**Problema confirmado:** las fichas visuales de Darío, Bruno y Mateo muestran
+múltiples vistas y expresiones del mismo personaje. Enviar la ficha completa
+como `image1/image2` a Qwen Edit puede producir figuras duplicadas: el modelo
+confunde vistas del diseño con más participantes de la escena. No era solamente
+un problema de escribir «no clones» en el prompt.
+
+Para nuevas generaciones, Studio reconoce las fichas de los tres personajes
+mediante su SHA-256 congelado e **isola la vista frontal de una sola figura**
+antes de cargar `image1/image2`. Para fichas multivista nuevas con formatos
+convencionales utiliza una heurística geométrica y recomienda revisarla; para
+fotos individuales mantiene el original. La imagen de la biblioteca, las
+revisiones anteriores y los resultados viejos NO se reescriben.
+
+El grafo positivo enviado a Qwen incluye además una restricción explícita
+de reparto: número exacto de sujetos, una aparición de cada personaje,
+correspondencia de `image1/image2` con sus nombres y rasgos, y ausencia
+de extras o clones en el fondo. El **prompt guardado permanece literal**;
+solo la copia del trabajo recibe las reglas. Las recetas usadas se conservan
+en el snapshot de cada trabajo nuevo (`cast[].reference_preparation`).
+
+**Límites:** se reduce la causa de duplicación pero Qwen no garantiza identidad
+ni número perfecto de personajes. Revisa las miniaturas antes de aprobar. Los
+resultados ya generados no se convierten retrospectivamente; si fallaron,
+realiza una nueva generación con ID de solicitud distinto tras actualizar,
+sin borrar el original.
