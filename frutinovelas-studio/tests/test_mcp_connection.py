@@ -191,7 +191,7 @@ async def test_real_protocol_diagnostic_checks_frutinovelas_without_calling_gene
             result = await connection_status()
         assert result.state == "ready", result.model_dump()
         assert result.server_name == "FRUTINOVELAS Prompts"
-        assert result.tools_count == 17
+        assert result.tools_count == 40
         assert result.local_url == f"http://127.0.0.1:{port}/mcp"
         assert result.checked_at
     finally:

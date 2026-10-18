@@ -216,3 +216,26 @@ El ejemplo de producción está en
 [`examples/chapters/dario_capitulo_2.json`](examples/chapters/dario_capitulo_2.json).
 No se importa de forma automática: hay que llamar a la herramienta MCP desde
 ChatGPT con el proyecto correcto y este plan. No afecta al capítulo 1.
+
+
+## Control ampliado desde MCP
+
+El MCP publica funciones tipadas equivalentes a los controles de Studio:
+consultar ComfyUI y el estado del servidor; crear y editar proyectos, capítulos,
+escenas y personajes por sus IDs reales; revisar versiones, ordenar y duplicar
+escenas; iniciar videos H3, consultar sus trabajos y resultados. En particular:
+
+- \`request_chapter_images\`: envía todas las imágenes Qwen que falten, evitando
+  duplicados si ya hay un resultado o trabajo activo.
+- \`generate_full_chapter\`: ejecuta el mismo trabajo que el botón
+  **Generar capítulo completo** (Qwen → aprobación automática → H3 → montaje MP4).
+  Requiere confirmar \`automatic_approval=true\` para esa ejecución.
+- \`request_scene_video\`: equivale al botón **Generar esta escena**.
+- Borrados exigen \`confirmed=true\`; siguen aplicando las revisiones de Studio.
+
+No se publica shell, acceso arbitrario a archivos ni los tokens del gateway. Las
+imágenes y audios nuevos se suben desde Studio; las herramientas MCP reutilizan
+sus IDs. **La URL pública de prueba sin autenticación da acceso a terceros que
+conozcan el enlace y permite modificar escenas y usar la GPU.** Usar solamente
+con proyectos descartables y cerrar el túnel al terminar.
+Después de actualizar, reinicia MCP y renueva la conexión del plugin de ChatGPT.

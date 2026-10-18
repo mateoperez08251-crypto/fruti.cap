@@ -11,6 +11,7 @@ from mcp.types import ImageContent, TextContent, ToolAnnotations
 
 from frutinovelas.config import get_settings
 from frutinovelas.mcp_chapters import register_chapter_tools
+from frutinovelas.mcp_controls import register_studio_controls
 from frutinovelas.schemas import SceneAudioGuide
 
 
@@ -53,6 +54,7 @@ def register_studio_tools(server):
     )
 
     register_chapter_tools(server, write, studio_request)
+    register_studio_controls(server, read, write, studio_request)
 
     @server.tool(annotations=read)
     def list_studio_projects() -> list[dict]:
