@@ -22,6 +22,7 @@ EMBEDDED = [
     ("scripts/validate_workflows.py", ROOT / "scripts" / "validate_workflows.py"),
     ("scripts/export_workflow_api.py", ROOT / "scripts" / "export_workflow_api.py"),
     ("scripts/comfy_gateway.py", ROOT / "scripts" / "comfy_gateway.py"),
+    ("scripts/narrated_gateway.py", ROOT / "scripts" / "narrated_gateway.py"),
     ("config/models_manifest.lock.json", ROOT / "config" / "models_manifest.lock.json"),
     ("config/workflow_profiles.json", ROOT / "config" / "workflow_profiles.json"),
     ("src/frutinovelas/__init__.py", ROOT / "src" / "frutinovelas" / "__init__.py"),
