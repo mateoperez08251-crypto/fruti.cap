@@ -56,6 +56,15 @@ def register_studio_tools(server):
     register_chapter_tools(server, write, studio_request)
     register_studio_controls(server, read, write, studio_request)
 
+    @server.tool(annotations=write)
+    def import_studio_image(request_id: str, filename: str, mime_type: str | None = None,
+                            content_base64: str | None = None, url: str | None = None) -> dict:
+        """Importar PNG/JPEG/WebP externo (base64 máximo 4 MiB o HTTPS pública hasta 40 MiB). No asigna fotograma ni ejecuta GPU. Repetir request_id reutiliza la importación."""
+        return studio_request("POST", "assets/import", {
+            "request_id": request_id, "filename": filename, "mime_type": mime_type,
+            "content_base64": content_base64, "url": url,
+        })
+
     @server.tool(annotations=read)
     def list_studio_projects() -> list[dict]:
         """Obtener IDs reales de los proyectos. No deducirlos de títulos."""

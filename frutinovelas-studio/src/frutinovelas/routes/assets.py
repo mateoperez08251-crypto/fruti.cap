@@ -12,6 +12,22 @@ from frutinovelas.models import Asset
 from frutinovelas.schemas import AssetOut, ErrorOut
 from frutinovelas.services.assets import AssetError, asset_path, store_image, thumbnail_path
 from frutinovelas.services.audio import store_audio
+from pydantic import BaseModel, Field, model_validator
+from uuid import UUID
+from frutinovelas.services.image_import import ImportErrorImage, import_image
+
+class ImageImportInput(BaseModel):
+    request_id: UUID
+    filename: str = Field(min_length=1, max_length=200)
+    mime_type: str | None = None
+    content_base64: str | None = None
+    url: str | None = None
+
+    @model_validator(mode="after")
+    def exactly_one(self):
+        if (self.content_base64 is None) == (self.url is None):
+            raise ValueError("Selecciona solamente base64 o URL HTTPS.")
+        return self
 from frutinovelas.services.scenes import audit
 
 router = APIRouter(tags=["archivos"])
@@ -72,3 +88,13 @@ def asset_thumb(asset_id: str, size: int = Query(320, ge=64, le=1024), session: 
     except (OSError, AssetError) as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No se pudo generar la miniatura.") from exc
     return FileResponse(path, media_type="image/webp", headers=CACHE)
+
+
+@router.post("/assets/import", status_code=201)
+def import_asset(body: ImageImportInput, session: Session = Depends(get_session)):
+    try:
+        return import_image(session, str(body.request_id), body.filename, body.mime_type,
+                            body.content_base64, body.url)
+    except ImportErrorImage as exc:
+        session.rollback()
+        raise HTTPException(422, str(exc)) from exc
