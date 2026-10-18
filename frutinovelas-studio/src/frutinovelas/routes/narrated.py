@@ -176,10 +176,10 @@ def update(id:str,body:NarratedUpdate,session:Session=Depends(get_session)):
         raise HTTPException(409,"No edites mientras se exporta.")
     payload=body.model_dump(exclude_unset=True,exclude={"expected_revision"})
     duration=_audio(session,payload.get("audio_asset_id",row.audio_asset_id)).duration_seconds
-    shots=[s.model_dump() for s in payload.get("shots",[])] if "shots" in payload else row.shots
+    shots=payload["shots"] if "shots" in payload else row.shots
     _shots(session,shots,duration)
     for field,value in payload.items():
-        setattr(row,field,[s.model_dump() for s in value] if field=="shots" else value)
+        setattr(row,field,value)
     row.revision+=1
     row.state="draft";row.progress=0;row.result_path=None;row.error=""
     session.commit()
