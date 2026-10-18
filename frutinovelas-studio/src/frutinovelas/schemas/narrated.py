@@ -20,7 +20,7 @@ class NarratedShot(BaseModel):
 
     @model_validator(mode="after")
     def valid_interval(self):
-        if self.end_seconds <= self.start_seconds:
+        if self.end_seconds - self.start_seconds < 0.05:
             raise ValueError("El final de una toma debe ser posterior al inicio.")
         return self
 
