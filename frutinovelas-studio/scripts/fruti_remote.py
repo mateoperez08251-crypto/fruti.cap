@@ -751,7 +751,8 @@ def arrancar_gateway(token: str, acceso: str) -> None:
         env.pop("FRUTI_GATEWAY_TOKEN", None)
         p = lanzar("gateway", [sys.executable, str(KIT_DIR / "scripts" / "comfy_gateway.py"), "--listen", listen,
                                "--port", str(GATEWAY_PORT), "--upstream", LOCAL, "--workflows-dir", str(API_DIR),
-                               "--identity-file", str(IDENTITY_FILE)], LOG_DIR / "gateway.log", env=env)
+                               "--identity-file", str(IDENTITY_FILE), "--narration-dir", str(DATA_DIR / "narrated"),
+                                "--comfy-output-dir", str(DATA_DIR / "comfy_output")], LOG_DIR / "gateway.log", env=env)
         estado(gateway_listen=listen)
         for _ in range(40):
             if gw_vivo():

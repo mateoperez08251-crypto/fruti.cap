@@ -24,6 +24,7 @@ FILES = {
     "scripts/validate_workflows.py": 0o644,
     "scripts/export_workflow_api.py": 0o644,
     "scripts/comfy_gateway.py": 0o644,
+    "scripts/narrated_gateway.py": 0o644,
     "config/models_manifest.lock.json": 0o644,
     "config/workflow_profiles.json": 0o644,
     "src/frutinovelas/__init__.py": 0o644,

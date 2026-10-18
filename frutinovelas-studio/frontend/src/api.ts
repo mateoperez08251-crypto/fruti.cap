@@ -1,5 +1,30 @@
 // Cliente de la API v1 de FRUTINOVELAS Studio.
 
+export type NarratedShot = {
+  start_seconds: number
+  end_seconds: number
+  text: string
+  image_prompt: string
+  animation_prompt: string
+  image_asset_id: string | null
+  motion: 'zoom_in' | 'zoom_out' | 'pan_left' | 'pan_right' | 'still'
+}
+export type NarratedVideo = {
+  id: string
+  project_id: string
+  title: string
+  audio_asset_id: string
+  audio_duration: number
+  transcript: string
+  aspect_ratio: '9:16' | '16:9'
+  shots: NarratedShot[]
+  revision: number
+  state: 'draft' | 'queued' | 'rendering' | 'completed' | 'failed'
+  progress: number
+  error: string
+  result_url: string | null
+}
+
 export type Project = {
   id: string
   name: string
@@ -199,6 +224,21 @@ const json = (method: string, data: unknown): RequestInit => ({
 })
 
 export const api = {
+  deleteNarratedOutput: (id: string) => request<NarratedVideo>('/narrated-videos/' + id + '/output', { method: 'DELETE' }),
+  discardGenerationOutput: (id: string) => request<{discarded: boolean; remote_copy: string}>('/generations/' + id + '/output', { method: 'DELETE' }),
+  narratedVideos: (projectId: string) => request<NarratedVideo[]>('/projects/' + projectId + '/narrated-videos'),
+  narratedVideo: (id: string) => request<NarratedVideo>('/narrated-videos/' + id),
+  uploadNarration: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return request<Asset>('/assets/narration', { method: 'POST', body: fd })
+  },
+  createNarratedVideo: (projectId: string, data: { title: string; audio_asset_id: string; transcript: string; aspect_ratio: '9:16' | '16:9' }) =>
+    request<NarratedVideo>('/projects/' + projectId + '/narrated-videos', json('POST', data)),
+  updateNarratedVideo: (id: string, data: { expected_revision: number; title?: string; transcript?: string; shots?: NarratedShot[]; aspect_ratio?: '9:16' | '16:9' }) =>
+    request<NarratedVideo>('/narrated-videos/' + id, json('PATCH', data)),
+  renderNarratedVideo: (id: string, expected_revision: number) =>
+    request<NarratedVideo>('/narrated-videos/' + id + '/render', json('POST', { expected_revision })),
   chapterRenders: (id: string, signal?: AbortSignal) => request<ChapterRender[]>(`/chapters/${id}/renders`, { signal }),
   renderChapter: (id: string, revision: number, scenes: Record<string, number>, requestId: string) => request<ChapterRender>(`/chapters/${id}/render`, json('POST', { expected_revision: revision, scene_revisions: scenes, request_id: requestId, automatic_approval: true })),
   characters: (projectId: string, signal?: AbortSignal) => request<Character[]>(`/projects/${projectId}/characters`, { signal }),

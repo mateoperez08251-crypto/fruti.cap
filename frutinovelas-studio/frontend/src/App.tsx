@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
-import { Clapperboard, FolderOpen, Home, MessagesSquare, PlugZap } from 'lucide-react'
+import { Clapperboard, Film, FolderOpen, Home, MessagesSquare, PlugZap } from 'lucide-react'
 import { useCallback, useRef, useState, type RefObject } from 'react'
 import { NavLink, Route, Routes, useParams } from 'react-router-dom'
 import { api } from './api'
 import { StatusBar } from './components/StatusBar'
 import { ChapterPage } from './pages/ChapterPage'
+import { NarratedPage } from './pages/NarratedPage'
 import { ProjectPage } from './pages/ProjectPage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { ConnectionPage } from './pages/ConnectionPage'
@@ -25,6 +26,9 @@ function Sidebar({ onMcpOpen, mcpButton, mcpOpen }: { onMcpOpen: () => void; mcp
       </div>
       <NavLink to="/" end className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} id="nav-home">
         <Home size={16} /> <span>Proyectos</span>
+      </NavLink>
+      <NavLink to="/videos-narrados" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+        <Film size={16} /> <span>Videos narrados</span>
       </NavLink>
       <NavLink to="/conexion" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
         <PlugZap size={16} /> <span>Conexión ComfyUI</span>
@@ -70,6 +74,7 @@ export default function App() {
       <main className="main">
         <Routes>
           <Route path="/" element={<ProjectsPage />} />
+          <Route path="/videos-narrados" element={<NarratedPage />} />
           <Route path="/conexion" element={<ConnectionPage />} />
           <Route path="/proyectos/:projectId" element={<ProjectRoute />} />
           <Route path="/capitulos/:chapterId" element={<ChapterRoute />} />

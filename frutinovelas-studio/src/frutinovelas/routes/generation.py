@@ -140,3 +140,69 @@ def generation_content(job_id: str, download: bool = Query(False), session: Sess
     if base not in path.parents or not path.is_file():
         raise HTTPException(404, "El archivo no está disponible en el almacenamiento.")
     return FileResponse(path, media_type=job.result_mime, filename=path.name if download else None)
+
+
+@router.delete("/generations/{job_id}/output")
+def discard_generated_output(job_id: str, session: Session = Depends(get_session)):
+    """Discard a finished, unlinked generation without modifying its history."""
+    from frutinovelas.models import Asset, ChapterRender, Character, NarratedVideo, SceneRevision
+    from frutinovelas.services.assets import asset_path
+    job = _job(session, job_id)
+    if job.state not in ("completed", "failed"):
+        raise HTTPException(409, "No se pueden borrar resultados de trabajos activos.")
+    if job.result_asset_id:
+        asset_id = job.result_asset_id
+        if session.scalar(select(SceneRevision.id).where(
+            (SceneRevision.start_asset_id == asset_id) | (SceneRevision.end_asset_id == asset_id)).limit(1)):
+            raise HTTPException(409, "La imagen se usa en una revisión de escena. Conserva el historial o desasigna otra imagen.")
+        if session.scalar(select(Character.id).where(Character.reference_asset_id == asset_id).limit(1)):
+            raise HTTPException(409, "La imagen es una referencia de personaje.")
+        for video in session.scalars(select(NarratedVideo)):
+            if any(shot.get("image_asset_id") == asset_id for shot in video.shots):
+                raise HTTPException(409, "La imagen se utiliza en un video narrado.")
+        asset = session.get(Asset, asset_id)
+        if asset:
+            other = session.scalar(select(GenerationJob.id).where(
+                GenerationJob.result_asset_id == asset_id, GenerationJob.id != job.id).limit(1))
+            if other:
+                raise HTTPException(409, "La imagen se comparte con otra generación.")
+    # Video results in chapter renders may be needed to reassemble archived runs.
+    if job.kind == "video":
+        for render in session.scalars(select(ChapterRender)):
+            if any(entry.get("video_job_id") == job_id for entry in render.snapshot.get("scenes", [])):
+                raise HTTPException(409, "El video pertenece al historial de un capítulo automático.")
+    # Purge the generated ComfyUI copy first; otherwise keep the local file
+    # so a failed remote cleanup can be retried without losing data.
+    from frutinovelas.models import ComfyConnection
+    from frutinovelas.services.generation import connection_token
+    connection = session.get(ComfyConnection, "default")
+    if connection:
+        remote = ComfyClient(connection.url, connection_token(connection))
+        try:
+            remote.request("DELETE", f"/frutinovelas/narration/generated/{job.id}",
+                           params={"kind": job.kind})
+        except (ComfyError, httpx.HTTPError) as exc:
+            raise HTTPException(503, "No se pudo liberar la copia remota. Actualiza el gateway o reintenta con ComfyUI conectado.") from exc
+        finally:
+            remote.close()
+    settings = get_settings()
+    filename = None
+    if job.result_path:
+        filename = (settings.resolved_data_dir / job.result_path).resolve()
+        if settings.resolved_data_dir not in filename.parents:
+            raise HTTPException(422, "Ruta inválida para eliminación.")
+    if job.result_asset_id:
+        asset = session.get(Asset, job.result_asset_id)
+        if asset:
+            session.delete(asset)
+    job.result_asset_id = None
+    job.result_path = None
+    job.result_sha256 = None
+    job.result_mime = None
+    snapshot = dict(job.snapshot)
+    snapshot["discarded"] = True
+    job.snapshot = snapshot
+    session.commit()
+    if filename and filename.is_file():
+        filename.unlink()
+    return {"discarded": True, "remote_copy": "deleted" if connection else "not_connected", "local_output_deleted": True}

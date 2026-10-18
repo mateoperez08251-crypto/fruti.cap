@@ -39,6 +39,7 @@ from frutinovelas.routes import (
     generation,
     images,
     mcp_connection,
+    narrated,
     projects,
     prompts,
     renders,
@@ -89,6 +90,8 @@ npm run build</pre>
 async def lifespan(_app: FastAPI):
     settings = get_settings()
     upgrade_to_head()
+    from frutinovelas.services.narrated import recover_interrupted
+    recover_interrupted()
     log.info("Datos en %s", settings.resolved_data_dir)
     worker = GenerationWorker()
     if settings.embedded_worker:
@@ -131,7 +134,7 @@ def create_app() -> FastAPI:
                 return JSONResponse({"detail": "Se requiere autorización."}, status_code=401)
         return await call_next(request)
 
-    for module in (system, projects, scenes, assets, generation, prompts, characters, images, renders, mcp_connection):
+    for module in (system, projects, scenes, assets, generation, prompts, characters, images, renders, mcp_connection, narrated):
         app.include_router(module.router, prefix=API_PREFIX)
 
     ui = frontend_dir()
