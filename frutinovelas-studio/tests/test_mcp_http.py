@@ -91,6 +91,7 @@ async def test_real_http_endpoint_tools_resources_and_dns_rebinding_protection()
                         "abandon_uncertain_generation",
                         "request_chapter_images",
                         "generate_full_chapter",
+                        "import_studio_image",
                         "list_studio_projects",
                         "list_studio_chapters",
                         "list_studio_scenes",

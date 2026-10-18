@@ -262,3 +262,7 @@ correspondencia de cada imagen de referencia**. No altera las fichas
 originales, los prompts literales ni los resultados anteriores. La calidad
 requiere revisar cada imagen, y una imagen errónea debe regenerarse
 explícitamente, nunca aprobarse de manera silenciosa.
+
+### Importar imágenes externas desde ChatGPT/Claude por MCP
+
+`import_studio_image` incorpora PNG, JPEG o WebP creados fuera de ComfyUI sin generar nada. Recibe bytes base64 (máx. 4 MiB) o URL HTTPS pública (máx. 40 MiB, o el límite menor de Studio), valida la imagen y devuelve un ID. Después `inspect_studio_image` permite revisar el resultado y `set_studio_scene_frame` asignarlo con `expected_revision` únicamente bajo petición expresa. Ver [guía completa](docs/IMPORTAR_IMAGENES_MCP.md). La importación no ejecuta GPU ni crea clips.

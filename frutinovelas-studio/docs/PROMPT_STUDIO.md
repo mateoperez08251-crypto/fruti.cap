@@ -177,3 +177,7 @@ usarlo solo tras asociar una referencia correcta.
 Ejecutar pytest y build/lint del frontend conforme al README. Los tests verifican literalidad,
 límites, turnos, referencias, API, CLI y MCP. La calidad visual requiere revisar una generación
 corta con el perfil real antes de producir un capítulo completo.
+
+## Herramienta de importación MCP
+
+`import_studio_image` recibe `request_id`, `filename`, opcional `mime_type` y exactamente uno de `content_base64` o `url` (HTTPS pública). Devuelve metadatos y estado de reutilización. No importa rutas locales de ChatGPT por sí mismo ni genera video. El ejemplo y límites están en [IMPORTAR_IMAGENES_MCP.md](IMPORTAR_IMAGENES_MCP.md).

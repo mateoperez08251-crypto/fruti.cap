@@ -209,3 +209,11 @@ class ChapterRender(TimestampMixin, Base):
     snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
     error: Mapped[str] = mapped_column(Text, default="")
     result_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
+class ImageImportRequest(Base):
+    __tablename__ = "image_import_requests"
+    request_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    asset_id: Mapped[str] = mapped_column(ForeignKey("assets.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

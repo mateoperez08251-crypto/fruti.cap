@@ -181,3 +181,7 @@ ni número perfecto de personajes. Revisa las miniaturas antes de aprobar. Los
 resultados ya generados no se convierten retrospectivamente; si fallaron,
 realiza una nueva generación con ID de solicitud distinto tras actualizar,
 sin borrar el original.
+
+## Importación de imágenes externas
+
+`import_studio_image` importa archivos PNG/JPEG/WebP ya creados desde bytes base64 o desde una URL HTTPS pública; produce un asset en el almacenamiento existente sin invocar Qwen/H3. Cada `request_id` UUID evita duplicados por reintento y el almacén deduplica el SHA-256. Inspecciona con `inspect_studio_image` y asigna solo si lo indica el usuario mediante `set_studio_scene_frame(scene_id, expected_revision, role, asset_id)`. Revisa [mecanismo real de transferencia y límites](IMPORTAR_IMAGENES_MCP.md).
