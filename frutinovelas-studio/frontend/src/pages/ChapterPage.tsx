@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useBlocker, useSearchParams } from 'react-router-dom'
 import { api, ApiError, type Chapter, type Scene } from '../api'
 import { ChapterAutoRender } from '../components/ChapterAutoRender'
+import { ChapterImagesGallery } from '../components/ChapterImagesGallery'
 import { PromptDialog } from '../components/Dialogs'
 import { SceneEditor } from '../components/SceneEditor'
 import { SceneList } from '../components/SceneList'
@@ -269,6 +270,7 @@ export function ChapterPage({ chapterId }: { chapterId: string }) {
 
       {tab === 'escenas' && (
         <>
+          {list.length > 0 && <ChapterImagesGallery scenes={list} />}
           {scenes.isError && <p className="notice warn" role="alert">No se pudieron cargar las escenas. <button className="btn btn-sm" onClick={() => scenes.refetch()}>Reintentar</button></p>}
           {scenes.isLoading && <div className="skeleton" style={{ height: 300 }} />}
 
