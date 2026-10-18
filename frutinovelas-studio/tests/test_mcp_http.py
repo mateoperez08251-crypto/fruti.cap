@@ -104,6 +104,10 @@ async def test_real_http_endpoint_tools_resources_and_dns_rebinding_protection()
                         "approve_scene_image",
                         "request_chapter_render",
                         "list_chapter_renders",
+                        "list_narrated_videos",
+                        "get_narrated_video",
+                        "save_narrated_storyboard",
+                        "render_narrated_video",
                     }
                     result = await session.call_tool(
                         "get_directing_guidance", {"task": "image", "preset": "general"}
