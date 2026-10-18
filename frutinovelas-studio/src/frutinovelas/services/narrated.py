@@ -119,6 +119,17 @@ def render_video(video_id: str):
             path.unlink(missing_ok=True)
 
 
+def recover_interrupted():
+    """Do not leave work permanently locked after Studio is restarted."""
+    from sqlalchemy import select
+    with session_factory()() as session:
+        rows = session.scalars(select(NarratedVideo).where(NarratedVideo.state.in_(["queued", "rendering"]))).all()
+        for row in rows:
+            row.state = "failed"
+            row.error = "La exportación se interrumpió al cerrar Studio. Puedes volver a intentarlo."
+        session.commit()
+
+
 def start_video(video_id: str):
     thread = threading.Thread(target=render_video, args=(video_id,), name="narration-"+video_id[:8], daemon=True)
     thread.start()
