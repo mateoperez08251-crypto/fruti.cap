@@ -45,9 +45,10 @@ export function CharacterLibrary({ projectId }: { projectId: string }) {
           onChange={(e) => setVoiceDescription(e.target.value)} placeholder="Por ejemplo: voz grave y cálida, acento mexicano, ritmo pausado." />
         <p className="hint">Describe su timbre, acento y forma de hablar para conservarlos entre escenas.</p>
       </div>
-      <AudioUpload id="character-voice" label="Muestra de voz del personaje" asset={voiceAsset} disabled={save.isPending}
+      <AudioUpload id="character-voice" label="Muestra de voz del personaje" asset={voiceAsset} disabled={save.isPending} minDurationSeconds={2}
         onChange={setVoiceAsset} onBusyChange={setAudioBusy} />
-      <p className="hint">La muestra permite escuchar su voz. Para cada escena, sube un audio con el diálogo que debe decir: guardar una muestra no genera frases nuevas ni las añade automáticamente.</p>
+      <p className="hint">Sube una muestra de 2–15 segundos una sola vez. En cada escena, selecciona esta voz y escribe los nuevos diálogos en el prompt de animación: el flujo los generará usando la muestra como referencia.</p>
+      <p className="hint">La muestra se reutiliza en cada generación. No es un entrenamiento permanente y la voz resultante puede variar.</p>
       <p className="hint">Los cambios de biblioteca no reemplazan las referencias ni las voces guardadas en escenas anteriores.</p>
       <div className="row"><button className="btn btn-primary" disabled={!name.trim() || !asset || busy || save.isPending}>Guardar personaje</button>
         {editing && <button type="button" className="btn" disabled={save.isPending || busy} onClick={() => { setEditing(null); setName(''); setDescription(''); setAsset(null); setVoiceDescription(''); setVoiceAsset(null) }}>Nuevo personaje</button>}</div>

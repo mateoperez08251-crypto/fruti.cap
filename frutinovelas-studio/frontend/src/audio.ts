@@ -1,4 +1,4 @@
-import type { Asset, AudioGuide, AudioGuideInput } from './api'
+import type { Asset, AudioGuide, AudioGuideInput, Character, VoiceReference } from './api'
 
 export const audioSeconds = (seconds: number) => seconds.toLocaleString('es', { maximumFractionDigits: 3 })
 
@@ -63,6 +63,49 @@ export function audioErrors(guides: AudioDraft[], duration: number): string[] {
     const earlier = intervals.slice(0, i).find((previous) => previous.end > intervals[i].start + 0.000001)
     if (earlier) errors.push(`Los audios ${earlier.number} y ${intervals[i].number} se superponen. Ajusta sus inicios para que cada intervención tenga su turno.`)
   }
+  return errors
+}
+
+export type VoiceDraft = {
+  characterId: string
+  characterName: string
+  voiceDescription: string
+  assetId: string
+  asset: Asset | null
+}
+
+export const voiceDrafts = (ids: string[] = [], references: VoiceReference[] = []): VoiceDraft[] => ids.map((id) => {
+  const reference = references.find((voice) => voice.character_id === id)
+  return {
+    characterId: id, characterName: reference?.character_name ?? 'Personaje guardado',
+    voiceDescription: reference?.voice_description ?? '', assetId: reference?.asset_id ?? '', asset: reference?.asset ?? null,
+  }
+})
+
+export const voiceFromCharacter = (character: Character): VoiceDraft => ({
+  characterId: character.id, characterName: character.name, voiceDescription: character.voice_description ?? '',
+  assetId: character.voice_asset?.id ?? '', asset: character.voice_asset ?? null,
+})
+
+export function voiceSampleError(asset: Asset | null): string | null {
+  if (!asset || asset.kind !== 'audio') return 'Añade una muestra de voz en la biblioteca de personajes.'
+  const seconds = asset.duration_seconds
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 2 || seconds > 15) {
+    return 'La muestra de voz debe durar entre 2 y 15 segundos.'
+  }
+  return null
+}
+
+export function voiceErrors(voices: VoiceDraft[]): string[] {
+  const errors: string[] = []
+  if (voices.length > 3) errors.push('Selecciona como máximo 3 voces para esta escena.')
+  let total = 0
+  for (const voice of voices) {
+    const error = voiceSampleError(voice.asset)
+    if (error) errors.push(`${voice.characterName}: ${error}`)
+    else total += voice.asset!.duration_seconds!
+  }
+  if (total > 15 + 0.000001) errors.push(`Las muestras seleccionadas suman ${audioSeconds(total)} s. El máximo conjunto es 15 s: selecciona menos voces o usa muestras más cortas.`)
   return errors
 }
 

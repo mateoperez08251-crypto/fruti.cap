@@ -17,7 +17,7 @@ type Props = {
 export function SceneAudio({ guides, characters, errors, disabled, onUpdate, onRemove, onAdd, onBusyChange }: Props) {
   return <>
     <p className="hint">Sube el diálogo de esta escena con la voz del personaje. H3 usará el audio como guía de voz y ritmo desde el segundo que indiques. Puedes elegir también a quien habla fuera de cámara.</p>
-    <p className="hint">El resultado se genera de nuevo y puede variar. La muestra de la biblioteca no crea ni añade automáticamente los diálogos de la escena.</p>
+    <p className="hint">El resultado se genera de nuevo y puede variar. Esta alternativa usa un diálogo ya grabado como guía. Para generar diálogos nuevos desde las muestras, utiliza «Voces de los personajes».</p>
     <div className="scene-audio-list">{guides.map((g, index) => {
       const character = characters.find((c) => c.id === g.characterId)
       return <div key={index} className="scene-audio-item" aria-label={`Audio ${index + 1}`}>

@@ -95,12 +95,31 @@ Al final imprime la URL y el comando para el PC. Opciones útiles:
 ```bash
 fruti setup --qwen-t2i si              # añade Qwen-Image-2512 (texto a imagen)
 fruti setup --qwen-edit fp8mixed       # añade Qwen-Image-Edit-2511
+fruti setup --voces-personajes si     # añade H3 Ref2VA para muestras de voz reutilizables
 fruti setup --perfil h3_quality_bf16_optional
 fruti setup --acceso quick             # Cloudflare Quick Tunnel en vez del proxy de RunPod
 fruti setup --sin-sha256               # solo tamaños (más rápido, menos seguro)
 ```
 
 Las opciones se guardan: los siguientes `fruti start` las reutilizan.
+
+### Añadir voces a una instalación existente
+
+Primero reconstruye y vuelve a subir el kit actualizado (secciones 0 y 3).
+Descomprímelo sobre `/workspace/frutinovelas-kit` y ejecuta:
+
+```bash
+fruti models --voces-personajes si
+fruti start --voces-personajes si --reexportar
+```
+
+Se descarga el checkpoint Ref2VA INT8 verificado (20,97 GB adicionales); el encoder
+y los VAEs del perfil H3 seleccionado se reutilizan. El kit publica
+`H3_VOZ_PERSONAJES.api.json` y registra su SHA-256. En Studio vuelve a **Guardar y comprobar** la
+conexión para leer esa identidad. Después guarda una muestra en cada personaje y
+selecciona sus voces en la escena: los diálogos nuevos se escriben en el prompt.
+Ver [Voces de personajes](AUDIO_Y_VOCES.md) para los límites y la conservación de
+versiones. Descargar y validar el flujo no demuestra todavía la calidad de voz.
 
 ## 5. Órdenes del día a día
 

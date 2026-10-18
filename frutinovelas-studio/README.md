@@ -84,15 +84,37 @@ no inician inferencias: la GPU se usa al solicitar una generación.
 ## Voces y audios de las escenas
 
 La biblioteca permite guardar una descripción y una muestra de voz por personaje.
-En **Audio y voces** de la escena puedes subir el diálogo, asignar quién habla y
-elegir el segundo de inicio. Los audios se guardan con la revisión y entran como
-guía en el flujo H3 actual mediante `MiniMaxH3AddGuide`.
+En **Audio y voces** de la escena selecciona las voces que hablan y escribe sus
+diálogos nuevos en el prompt de animación. H3 Ref2VA usa las muestras como referencia
+de timbre; no hace falta grabar cada frase. La escena conserva su selección y sus
+imágenes de inicio y final. Admite hasta tres voces, con muestras de 2–15 segundos
+cada una y 15 segundos en total. También se pueden usar audios de diálogo ya
+grabados como alternativa explícita.
 
 Consulta [Voces y audio por escena](docs/AUDIO_Y_VOCES.md) para uso, formatos,
-compatibilidad y límites. La muestra del personaje no genera frases nuevas
-automáticamente; la calidad de voz y sincronización requiere revisar un clip real.
+compatibilidad y límites. Activa el complemento del kit con `--voces-personajes si`
+(en Colab, `ACTIVAR_VOCES_PERSONAJES`); descarga Ref2VA INT8, 20,97 GB adicionales,
+y reutiliza encoder y VAEs H3. Después vuelve a comprobar la conexión de Studio.
+La muestra se reutiliza en cada generación, sin entrenamiento permanente. La calidad
+de voz y sincronización requiere revisar un clip real.
 La [explicación de autenticación](docs/AUTENTICACION.md) distingue la API local,
 MCP y el gateway, así como la configuración declarada y los controles implementados.
+
+## Iniciar el servidor en Colab
+
+Abre la [libreta Colab actualizada](notebooks/FRUTINOVELAS_ComfyUI_Imagenes_H3_Colab.ipynb).
+Incluye el kit autocontenido y trae `ACTIVAR_VOCES_PERSONAJES = True` para iniciar
+con muestras reutilizables. La celda de planificación muestra el espacio de los
+modelos antes de descargarlos; puedes desactivar voces si no las usarás en esa sesión.
+
+1. Actualiza Studio y su MCP a la misma versión del repositorio que la libreta.
+2. Selecciona GPU y ejecuta las celdas en orden. La exportación debe incluir
+   `H3_VOZ_PERSONAJES.api.json` cuando las voces están activas.
+3. Copia la URL y el token privado. En Studio abre **Conexión ComfyUI** y pulsa
+   **Guardar y comprobar** con esos datos.
+4. Reinicia el MCP si estaba abierto para cargar las herramientas y guías
+   actualizadas. El catálogo de estilos se consulta desde el MCP local de Studio;
+   Colab ejecuta la generación audiovisual.
 
 ## Comprobar los cambios
 
@@ -119,6 +141,23 @@ Hay cuatro skills para asistentes en `../.agents/skills/`, un compilador validab
 cinco ejemplos y una guía de continuidad basada en el chat compartido. Las reglas sirven para
 cualquier escena; el preset `frutinovelas` añade tus preferencias y `general` permite otros sujetos
 y estilos. La historia de la heladería se consulta solo cuando corresponde.
+
+### Estilos visuales para la IA
+
+Lee [ESTILOS_VISUALES.md](docs/ESTILOS_VISUALES.md) antes de redactar prompts de
+imagen o animación. El catálogo incluye **Angulado y Geométrico (Mignola & Y2K)**,
+con identificador `angulado_geometrico_y2k`: líneas rectas, siluetas afiladas,
+proporciones geométricas, sombras duras y bloques de color de alto contraste.
+Incluye las referencias que propusiste —Atlantis, El planeta del tesoro y Kim
+Possible— y ejemplos de instrucciones visuales para los prompts.
+
+Por MCP, `get_directing_guidance` incorpora esta guía automáticamente para las
+tareas `image`, `animation` y `review`; también se puede leer directamente en
+`frutinovelas://guides/visual-styles`. Para aplicarlo, indica **«Usa el estilo
+angulado y geométrico»**: se activa **solo por petición expresa**, nunca por leer
+el catálogo. Al solicitarlo, la IA consulta también referencias en internet,
+prioriza fuentes originales y cita lo utilizado fuera del prompt. La selección
+orienta el nuevo prompt y conserva la identidad y continuidad de sus personajes.
 
 ```powershell
 py -3 -m uv run frutinovelas-prompts h3 examples/prompts/bruno_horn_i2va.json

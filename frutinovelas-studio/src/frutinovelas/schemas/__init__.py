@@ -113,6 +113,7 @@ class SceneParameters(BaseModel):
     image_prompt: str = Field(default="", max_length=30000)
     image_approval: Literal["manual", "automatic"] = "manual"
     audio_guides: list[SceneAudioGuide] = Field(default_factory=list, max_length=8)
+    voice_character_ids: list[str] = Field(default_factory=list, max_length=3)
 
 
 class SceneCreate(BaseModel):

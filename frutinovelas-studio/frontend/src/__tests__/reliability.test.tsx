@@ -4,8 +4,8 @@ import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-
 import { afterEach, expect, test, vi } from 'vitest'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import App from '../App'
-import { api, ApiError, type Asset, type Chapter, type Character, type Generation, type ImageGeneration, type Project, type Scene } from '../api'
-import { audioDrafts, audioErrors } from '../audio'
+import { api, ApiError, type Asset, type Chapter, type Character, type Generation, type ImageGeneration, type Project, type Scene, type VoiceReference } from '../api'
+import { audioDrafts, audioErrors, voiceDrafts, voiceErrors, voiceFromCharacter } from '../audio'
 import { ToastProvider } from '../components/Toast'
 
 const asset: Asset = { id: 'a1', kind: 'image', sha256: 'abc', size_bytes: 1, mime: 'image/png', width: 576, height: 1024, original_name: 'start.png', created_at: '2026-01-01' }
@@ -382,6 +382,9 @@ test('chapter generation requires explicit automatic approval and the saved revi
 const dialogue: Asset = { ...asset, id: 'audio-1', kind: 'audio', mime: 'audio/wav', width: null, height: null, duration_seconds: 2, original_name: 'dialogo.wav' }
 const guide = (start = 0, characterId: string | null = null) => ({ asset_id: dialogue.id, asset: dialogue, character_id: characterId, character_name: characterId ? 'Cocardo' : null, voice_description: characterId ? 'Voz grave, ritmo pausado.' : '', start_seconds: start })
 const audioFile = () => new File(['wave'], 'dialogo.wav', { type: 'audio/wav' })
+const voicedCharacters: Character[] = characters.map((c, i) => ({ ...c, voice_asset: { ...dialogue, id: `sample-${i}` }, voice_description: `Voz de ${c.name}.` }))
+const voiceReference = (c: Character): VoiceReference => ({ character_id: c.id, character_name: c.name,
+  voice_description: c.voice_description ?? '', asset_id: c.voice_asset!.id, asset: c.voice_asset! })
 
 async function openAudioPreparation() {
   const details = screen.getByText(/^3 · Audio y voces/).closest('details')!
@@ -590,4 +593,187 @@ test('audio upload uses a multipart request to the dedicated asset route', async
   expect(fetcher).toHaveBeenCalledWith('/api/v1/assets/audio', { method: 'POST', body: expect.any(FormData), signal: controller.signal })
   const form = fetcher.mock.calls[0][1]?.body as FormData
   expect(form.get('file')).toEqual(file)
+})
+
+test('library voices generate new dialogue without uploading clips and include offscreen characters', async () => {
+  const cast = [...voicedCharacters.map((c, i) => ({ ...c, voice_asset: { ...c.voice_asset!, duration_seconds: i === 2 ? 8 : 2 } })),
+    { ...voicedCharacters[0], id: 'character-3', name: 'Narradora' }]
+  const prepared: Scene = { ...originals[0], end_asset: { ...asset, id: 'end-image' }, mode: 'FL2VA',
+    prompt: 'Cocardo speaks: <d>¡Sí, mamá! ¿Vienes?</d>',
+    parameters: { character_ids: ['character-0', 'character-1'], custom_setting: 'conservar' } }
+  const upload = vi.fn<typeof api.uploadAudio>()
+  const generate = vi.fn<typeof api.generateScene>()
+  const update = vi.fn<typeof api.updateScene>(async (_id, data) => ({ ...prepared, revision: 2, revision_number: 2,
+    parameters: { ...data.parameters as Scene['parameters'], voice_references: ((data.parameters as Scene['parameters']).voice_character_ids ?? []).map((id) => voiceReference(cast.find((c) => c.id === id)!)) } }))
+  setup({ scenes: async () => [prepared, originals[1]], characters: async () => cast, updateScene: update, uploadAudio: upload, generateScene: generate })
+  await screen.findByDisplayValue(prepared.prompt)
+  await openAudioPreparation()
+  fireEvent.click(await screen.findByRole('checkbox', { name: 'Usar voz de Cocardo' }))
+  expect(control('btn-save-scene').disabled).toBe(false)
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Usar voz de Darío' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Usar voz de Bruno' }))
+  expect((screen.getByRole('checkbox', { name: 'Usar voz de Narradora' }) as HTMLInputElement).disabled).toBe(true)
+  expect(control('scene-audio-upload-file').disabled).toBe(true)
+  expect(control('btn-generate-scene').disabled).toBe(true)
+  click('btn-save-scene')
+  await waitFor(() => expect(update).toHaveBeenCalledOnce())
+  expect(update.mock.calls[0][1]).toMatchObject({ expected_revision: 1, parameters: {
+    voice_character_ids: ['character-2', 'character-0', 'character-1'], character_ids: ['character-0', 'character-1'], custom_setting: 'conservar',
+  } })
+  expect(update.mock.calls[0][1].parameters).not.toHaveProperty('audio_guides')
+  expect(update.mock.calls[0][1].parameters).not.toHaveProperty('voice_references')
+  expect(update.mock.calls[0][1]).not.toHaveProperty('end_asset_id')
+  expect(update.mock.calls[0][1]).not.toHaveProperty('prompt')
+  expect(control('scene-prompt').value).toBe(prepared.prompt)
+  expect(upload).not.toHaveBeenCalled()
+  expect(generate).not.toHaveBeenCalled()
+})
+
+test('switching prepared dialogue to library voices requires explicitly removing the saved clips', async () => {
+  const initial = { ...originals[0], parameters: { audio_guides: [guide()], custom_setting: 'conservar' } }
+  const update = vi.fn<typeof api.updateScene>(async (_id, data) => ({ ...initial, revision: 2, revision_number: 2,
+    parameters: { ...data.parameters as Scene['parameters'], voice_references: [voiceReference(voicedCharacters[0])] } }))
+  setup({ scenes: async () => [initial, originals[1]], characters: async () => voicedCharacters, updateScene: update })
+  await screen.findByDisplayValue('Original uno')
+  await openAudioPreparation()
+  const choice = await screen.findByRole('checkbox', { name: 'Usar voz de Darío' }) as HTMLInputElement
+  expect(choice.disabled).toBe(true)
+  fireEvent.click(choice)
+  expect(document.querySelectorAll('.scene-audio-item')).toHaveLength(1)
+  expect(control('btn-save-scene').disabled).toBe(true)
+  fireEvent.click(screen.getByRole('button', { name: 'Quitar audios preparados para elegir voces' }))
+  expect(document.querySelectorAll('.scene-audio-item')).toHaveLength(0)
+  expect(choice.disabled).toBe(false)
+  fireEvent.click(choice)
+  click('btn-save-scene')
+  await waitFor(() => expect(update).toHaveBeenCalledOnce())
+  expect(update.mock.calls[0][1].parameters).toMatchObject({ audio_guides: [], voice_character_ids: ['character-0'], custom_setting: 'conservar' })
+})
+
+test('switching saved voices to a prepared clip sends an explicit empty voice selection', async () => {
+  const initial = { ...originals[0], parameters: { voice_character_ids: ['character-0'], voice_references: [voiceReference(voicedCharacters[0])] } }
+  const upload = vi.fn<typeof api.uploadAudio>(async () => dialogue)
+  const update = vi.fn<typeof api.updateScene>(async (_id, data) => ({ ...initial, revision: 2, revision_number: 2,
+    parameters: { ...data.parameters as Scene['parameters'], voice_references: [], audio_guides: [guide()] } }))
+  setup({ scenes: async () => [initial, originals[1]], characters: async () => voicedCharacters, uploadAudio: upload, updateScene: update })
+  await screen.findByDisplayValue('Original uno')
+  await openAudioPreparation()
+  expect(control('scene-audio-upload-file').disabled).toBe(true)
+  fireEvent.change(control('scene-audio-upload-file'), { target: { files: [audioFile()] } })
+  expect(upload).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Quitar voces para usar audio preparado' }))
+  expect(control('scene-audio-upload-file').disabled).toBe(false)
+  fireEvent.change(control('scene-audio-upload-file'), { target: { files: [audioFile()] } })
+  await screen.findByLabelText('Personaje del audio 1')
+  await waitFor(() => expect(control('btn-save-scene').disabled).toBe(false))
+  click('btn-save-scene')
+  await waitFor(() => expect(update).toHaveBeenCalledOnce())
+  expect(update.mock.calls[0][1].parameters).toMatchObject({ voice_character_ids: [], audio_guides: [{ asset_id: dialogue.id, character_id: null, start_seconds: 0 }] })
+})
+
+test('a voice selection preserves its draft, revision and changes made during a pending save', async () => {
+  const initial = { ...originals[0], parameters: { voice_character_ids: ['character-0'], voice_references: [voiceReference(voicedCharacters[0])] } }
+  const pending = deferred<Scene>()
+  const update = vi.fn<typeof api.updateScene>(() => pending.promise)
+  setup({ scenes: async () => [initial, originals[1]], characters: async () => voicedCharacters, updateScene: update })
+  await screen.findByDisplayValue('Original uno')
+  await openAudioPreparation()
+  fireEvent.click(await screen.findByRole('checkbox', { name: 'Usar voz de Bruno' }))
+  click('tab-guion')
+  expect(control('scene-prompt').value).toBe('Original uno')
+  act(() => qc.setQueryData(['scenes', 'c1'], [{ ...initial, revision: 2, revision_number: 2, prompt: 'Cambio externo' }, originals[1]]))
+  click('btn-save-scene')
+  await waitFor(() => expect(update).toHaveBeenCalledOnce())
+  expect(update.mock.calls[0][1]).toMatchObject({ expected_revision: 1, parameters: { voice_character_ids: ['character-0', 'character-1'] } })
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Usar voz de Darío' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Usar voz de Cocardo' }))
+  await act(async () => pending.resolve({ ...initial, revision: 3, revision_number: 3, parameters: {
+    voice_character_ids: ['character-0', 'character-1'], voice_references: voicedCharacters.slice(0, 2).map(voiceReference),
+  } }))
+  expect((screen.getByRole('checkbox', { name: 'Usar voz de Darío' }) as HTMLInputElement).checked).toBe(false)
+  expect((screen.getByRole('checkbox', { name: 'Usar voz de Bruno' }) as HTMLInputElement).checked).toBe(true)
+  expect((screen.getByRole('checkbox', { name: 'Usar voz de Cocardo' }) as HTMLInputElement).checked).toBe(true)
+  await waitFor(() => expect(control('btn-save-scene').disabled).toBe(false))
+  click('btn-save-scene')
+  await waitFor(() => expect(update).toHaveBeenCalledTimes(2))
+  expect(update.mock.calls[1][1]).toMatchObject({ expected_revision: 3, parameters: { voice_character_ids: ['character-1', 'character-2'] } })
+})
+
+test('saved voices keep their sample and name after library changes and temporary deselection', async () => {
+  const saved = { ...voicedCharacters[0], voice_asset: { ...dialogue, id: 'original-sample', duration_seconds: 8 } }
+  const renamed = { ...saved, name: 'Darío actualizado', voice_description: 'Otra voz.', voice_asset: { ...dialogue, id: 'new-sample', duration_seconds: 15 } }
+  const initial = { ...originals[0], parameters: { voice_character_ids: ['character-0'], voice_references: [voiceReference(saved)] } }
+  const update = vi.fn<typeof api.updateScene>(async (_id, data) => ({ ...initial, revision: 2, revision_number: 2,
+    parameters: { ...data.parameters as Scene['parameters'], voice_references: [voiceReference(saved), voiceReference(voicedCharacters[1])] } }))
+  setup({ scenes: async () => [initial, originals[1]], characters: async () => [renamed, voicedCharacters[1]], updateScene: update })
+  await screen.findByDisplayValue('Original uno')
+  await openAudioPreparation()
+  await screen.findByRole('checkbox', { name: 'Usar voz de Bruno' })
+  expect(screen.getByText('Darío · guardado')).toBeTruthy()
+  expect(screen.getByLabelText('Escuchar muestra de Darío').getAttribute('src')).toContain('/assets/original-sample/content')
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Usar voz de Darío' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Usar voz de Darío' }))
+  expect(control('btn-save-scene').disabled).toBe(true)
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Usar voz de Bruno' }))
+  expect(screen.queryByText(/Las muestras seleccionadas suman/)).toBeNull()
+  expect(control('btn-save-scene').disabled).toBe(false)
+  expect(screen.getByLabelText('Escuchar muestra de Darío').getAttribute('src')).toContain('/assets/original-sample/content')
+  click('btn-save-scene')
+  await waitFor(() => expect(update).toHaveBeenCalledOnce())
+  expect((update.mock.calls[0][1].parameters as Scene['parameters']).voice_character_ids).toEqual(['character-0', 'character-1'])
+})
+
+test('missing and short voice samples are unavailable and combined samples above 15 seconds block saving', async () => {
+  const cast = [
+    { ...voicedCharacters[0], voice_asset: { ...dialogue, id: 'long-a', duration_seconds: 8 } },
+    { ...voicedCharacters[1], voice_asset: { ...dialogue, id: 'long-b', duration_seconds: 8 } },
+    { ...voicedCharacters[2], voice_asset: { ...dialogue, id: 'short-sample', duration_seconds: 1.5 } },
+    { ...characters[0], id: 'no-sample', name: 'Narradora' },
+  ]
+  setup({ characters: async () => cast })
+  await screen.findByDisplayValue('Original uno')
+  await openAudioPreparation()
+  expect((await screen.findByRole('checkbox', { name: 'Usar voz de Cocardo' }) as HTMLInputElement).disabled).toBe(true)
+  expect((screen.getByRole('checkbox', { name: 'Usar voz de Narradora' }) as HTMLInputElement).disabled).toBe(true)
+  expect(screen.getByText('La muestra de voz debe durar entre 2 y 15 segundos.')).toBeTruthy()
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Usar voz de Darío' }))
+  expect(control('btn-save-scene').disabled).toBe(false)
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Usar voz de Bruno' }))
+  expect(screen.getByText(/Las muestras seleccionadas suman 16 s/)).toBeTruthy()
+  expect(control('btn-save-scene').disabled).toBe(true)
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Usar voz de Bruno' }))
+  expect(control('btn-save-scene').disabled).toBe(false)
+})
+
+test('voice duration boundaries and missing snapshots agree with the native model contract', () => {
+  const durations = (seconds: number[]) => seconds.map((duration, i) => voiceFromCharacter({ ...voicedCharacters[i % 3],
+    voice_asset: { ...dialogue, id: `sample-${i}`, duration_seconds: duration } }))
+  expect(voiceErrors(durations([2, 5, 8]))).toEqual([])
+  expect(voiceErrors(durations([15]))).toEqual([])
+  expect(voiceErrors(durations([1.99]))).toHaveLength(1)
+  expect(voiceErrors(durations([15.01]))).toHaveLength(1)
+  expect(voiceErrors(durations([8, 8]))).toHaveLength(1)
+  expect(voiceErrors(voiceDrafts(['missing'], []))).toHaveLength(1)
+  expect(voiceErrors(durations([2, 2, 2, 2]))).toHaveLength(1)
+})
+
+test('uploading a voice sample shorter than two seconds preserves the saved sample', async () => {
+  const voiced = voicedCharacters[0]
+  const upload = vi.fn<typeof api.uploadAudio>(async () => ({ ...dialogue, id: 'too-short', duration_seconds: 1 }))
+  const update = vi.fn<typeof api.updateCharacter>(async () => voiced)
+  setup({ characters: async () => [voiced], uploadAudio: upload, updateCharacter: update })
+  await screen.findByDisplayValue('Original uno')
+  await act(async () => { await router.navigate('/proyectos/p1') })
+  const details = screen.getByText('Biblioteca de personajes · referencias para las escenas').closest('details')!
+  details.open = true
+  fireEvent(details, new Event('toggle'))
+  fireEvent.click(await screen.findByRole('button', { name: /Darío/ }))
+  fireEvent.change(control('character-voice-file'), { target: { files: [audioFile()] } })
+  await screen.findByText('La muestra de voz debe durar entre 2 y 15 segundos. Sube una muestra más larga.')
+  expect(document.querySelector('#character-voice audio')?.getAttribute('src')).toContain('/assets/sample-0/content')
+  edit('character-description', 'Conservar voz anterior')
+  await waitFor(() => expect((screen.getByText('Guardar personaje') as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(screen.getByText('Guardar personaje'))
+  await waitFor(() => expect(update).toHaveBeenCalledOnce())
+  expect(update.mock.calls[0][1]).not.toHaveProperty('voice_asset_id')
 })

@@ -60,6 +60,8 @@ export type SceneParameters = {
   character_ids?: string[]
   cast?: CharacterReference[]
   audio_guides?: AudioGuide[]
+  voice_character_ids?: string[]
+  voice_references?: VoiceReference[]
   seed_mode?: 'random' | 'fixed'
   seed?: number | null
   [k: string]: unknown
@@ -68,6 +70,7 @@ export type SceneParameters = {
 export type CharacterReference = { character_id: string; name: string; description: string; asset_id: string; sha256: string }
 export type AudioGuideInput = { asset_id: string; character_id: string | null; start_seconds: number }
 export type AudioGuide = AudioGuideInput & { asset?: Asset; character_name?: string | null; voice_description?: string }
+export type VoiceReference = { character_id: string; character_name: string; voice_description: string; asset_id: string; asset: Asset }
 export type Character = { id: string; project_id: string; name: string; description: string; revision: number; archived: boolean; reference_asset: Asset; voice_description?: string; voice_asset?: Asset | null }
 export type CharacterInput = { name: string; description: string; reference_asset_id: string; voice_description?: string; voice_asset_id?: string | null }
 export type ChapterRender = { id: string; chapter_id: string; state: string; error: string; scenes: { scene_id: string; title: string }[]; result_url: string | null }

@@ -7,7 +7,7 @@ import { useToast } from './Toast'
 
 const terminal = new Set(['completed', 'failed'])
 const labels: Record<Generation['state'], string> = {
-  queued: 'En cola local', uploading: 'Preparando y subiendo imágenes', submitting: 'Enviando a ComfyUI',
+  queued: 'En cola local', uploading: 'Preparando y subiendo referencias', submitting: 'Enviando a ComfyUI',
   waiting: 'En cola de ComfyUI', running: 'Generando en la GPU', downloading: 'Descargando video',
   unknown: 'Comprobando recepción', completed: 'Video disponible', failed: 'Interrumpido o fallido',
 }
@@ -43,7 +43,7 @@ export const GenerationPanel = memo(function GenerationPanel({ scene, dirty }: {
   return <section className="scene-generation" aria-label="Generación de esta escena">
     <div className="generation-heading"><h3><Film size={18} /> Animación de esta escena</h3>
       <button className="btn btn-ghost btn-sm" onClick={() => jobs.refetch()} aria-label="Actualizar generaciones"><RefreshCw size={14} /></button></div>
-    <p className="subtle">H3 · 9:16 · 20 pasos · {scene.end_asset ? 'inicio y final' : 'imagen inicial'} · las versiones anteriores se conservan.</p>
+    <p className="subtle">H3 · 9:16 · 20 pasos · {scene.end_asset ? 'inicio y final' : 'imagen inicial'}{scene.parameters.voice_character_ids?.length ? ' · voces de los personajes' : scene.parameters.audio_guides?.length ? ' · audio preparado' : ''} · las versiones anteriores se conservan.</p>
     {connection.isError && <p className="notice warn" role="alert">No se pudo consultar la configuración de ComfyUI. <button className="btn btn-sm" onClick={() => connection.refetch()}>Reintentar</button></p>}
     {connection.data && !connection.data.configured && <p className="notice warn"><Link to="/conexion">Configura la conexión con RunPod</Link> antes de generar.</p>}
     {dirty && <p className="subtle">Guarda los cambios con «Guardar» antes de generar.</p>}
@@ -51,7 +51,7 @@ export const GenerationPanel = memo(function GenerationPanel({ scene, dirty }: {
     <button id="btn-generate-scene" className="btn btn-primary" disabled={!ready || generate.isPending || jobs.isLoading}
       onClick={() => generate.mutate()}>{generate.isPending || active ? <Loader2 size={16} className="spin" /> : <Film size={16} />}
       {active ? 'Generación en curso' : 'Generar esta escena'}</button>
-    <p className="subtle">Se utiliza la revisión guardada. Las referencias se ajustan al centro para cubrir 576×1024, conservando los originales.</p>
+    <p className="subtle">Se utiliza la revisión guardada. Las imágenes se ajustan al centro para cubrir 576×1024, conservando los originales.</p>
     {jobs.isError && <p role="alert">No se pudo consultar el progreso. Pulsa actualizar cuando vuelva la conexión.</p>}
     <div className="generation-list" aria-live="polite">{jobs.data?.slice(0, visibleCount).map((job) => <article className="generation-item" key={job.id}>
       <div className="generation-heading"><strong>{labels[job.state]}</strong><span className="chip">r{job.revision_number}</span></div>

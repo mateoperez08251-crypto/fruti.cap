@@ -10,6 +10,9 @@ from frutinovelas.models import Asset, Chapter, Character
 from frutinovelas.schemas import AssetOut, SceneAudioGuide
 from frutinovelas.services.audio import MAX_AUDIO_SECONDS
 
+MIN_VOICE_REFERENCE_SECONDS = 2.0
+MAX_VOICE_REFERENCES = 3
+
 
 def public_character(character):
     return dict(
@@ -38,10 +41,53 @@ def _guide_input(guide):
     return SceneAudioGuide.model_validate(guide).model_dump()
 
 
+def _voice_ids(ids):
+    if (
+        not isinstance(ids, list)
+        or len(ids) > MAX_VOICE_REFERENCES
+        or any(not isinstance(id, str) or not id or len(id) > 36 for id in ids)
+        or len(set(ids)) != len(ids)
+    ):
+        raise ValueError("Selecciona como máximo tres personajes distintos para las referencias de voz.")
+    return ids
+
+
+def _validate_voice_references(parameters):
+    ids = _voice_ids(parameters.get("voice_character_ids", []))
+    references = parameters.get("voice_references", [])
+    if not isinstance(references, list) or len(references) != len(ids):
+        raise ValueError("Faltan referencias de voz guardadas. Vuelve a seleccionar los personajes.")
+    total_seconds = 0.0
+    for character_id, reference in zip(ids, references):
+        if not isinstance(reference, dict) or reference.get("character_id") != character_id:
+            raise ValueError("Una referencia de voz no corresponde al personaje seleccionado.")
+        asset = reference.get("asset")
+        length = asset.get("duration_seconds") if isinstance(asset, dict) else None
+        if (
+            not isinstance(asset, dict)
+            or asset.get("kind") != "audio"
+            or not reference.get("asset_id")
+            or asset.get("id") != reference["asset_id"]
+            or not isinstance(length, (float, int))
+            or not MIN_VOICE_REFERENCE_SECONDS <= length <= MAX_AUDIO_SECONDS
+            or not math.isfinite(length)
+        ):
+            raise ValueError("Cada muestra de voz debe ser un archivo de audio de entre 2 y 15 segundos.")
+        total_seconds += length
+    if total_seconds > MAX_AUDIO_SECONDS + 1e-6:
+        raise ValueError("Las muestras de voz seleccionadas no pueden superar 15 segundos en total.")
+    if references and parameters.get("audio_guides"):
+        raise ValueError(
+            "Elige referencias de voz de personajes o intervenciones de audio. "
+            "Para cambiar de modo, quita primero la selección del otro modo."
+        )
+
+
 def validate_scene_audio(parameters, duration_seconds):
-    """Use the same frame rounding as H3 and never silently trim or overlap audio."""
+    """Validate either voice references or timed audio, without modifying snapshots."""
     if not math.isfinite(duration_seconds) or duration_seconds <= 0:
         raise ValueError("La duración de la escena no es válida.")
+    _validate_voice_references(parameters)
     guides = parameters.get("audio_guides", [])
     if not isinstance(guides, list) or len(guides) > 8:
         raise ValueError("Una escena admite como máximo ocho intervenciones de audio.")
@@ -115,8 +161,54 @@ def _audio_snapshots(session, chapter, submitted, previous):
     return result
 
 
+def _voice_snapshots(session, chapter, submitted_ids, previous):
+    ids = _voice_ids(submitted_ids)
+    if not ids:
+        return []
+    if not isinstance(previous, list):
+        raise ValueError("Las referencias de voz guardadas no son válidas. Vuelve a seleccionar los personajes.")
+    saved = {
+        reference["character_id"]: reference
+        for reference in previous
+        if isinstance(reference, dict) and isinstance(reference.get("character_id"), str)
+    }
+    result = []
+    for character_id in ids:
+        unchanged = saved.get(character_id)
+        if unchanged is not None:
+            saved_asset = unchanged.get("asset") or {}
+            asset = session.get(Asset, unchanged.get("asset_id"))
+            if (
+                not asset
+                or asset.kind != "audio"
+                or not isinstance(saved_asset, dict)
+                or saved_asset.get("id") != asset.id
+                or saved_asset.get("sha256") != asset.sha256
+                or saved_asset.get("duration_seconds") != asset.duration_seconds
+            ):
+                raise ValueError("El archivo de una voz guardada cambió. Vuelve a seleccionar el personaje.")
+            result.append(copy.deepcopy(unchanged))
+            continue
+        character = session.get(Character, character_id)
+        if not character or character.archived or character.project_id != chapter.project_id:
+            raise ValueError("Un personaje de voz no pertenece a este proyecto o está archivado.")
+        asset = session.get(Asset, character.voice_asset_id) if character.voice_asset_id else None
+        if not asset or asset.kind != "audio":
+            raise ValueError("Guarda una muestra de audio válida en cada personaje de voz seleccionado.")
+        result.append(
+            dict(
+                character_id=character_id,
+                character_name=character.name,
+                voice_description=character.voice_description,
+                asset_id=asset.id,
+                asset=AssetOut.model_validate(asset).model_dump(mode="json"),
+            )
+        )
+    return result
+
+
 def scene_parameters(session, chapter_id, submitted, previous=None, duration_seconds=5.0):
-    """Never trust client-provided cast snapshots; unchanged selections retain their saved assets."""
+    """Derive references from IDs; unchanged selections retain their saved assets."""
     result = copy.deepcopy(submitted)
     previous = previous or {}
     ids = result.get("character_ids", [])
@@ -151,6 +243,10 @@ def scene_parameters(session, chapter_id, submitted, previous=None, duration_sec
     if "audio_guides" in result:
         result["audio_guides"] = _audio_snapshots(
             session, chapter, result["audio_guides"], previous.get("audio_guides", [])
+        )
+    if "voice_character_ids" in result or "voice_references" in result:
+        result["voice_references"] = _voice_snapshots(
+            session, chapter, result.get("voice_character_ids", []), previous.get("voice_references", [])
         )
     validate_scene_audio(result, duration_seconds)
     return result

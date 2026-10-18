@@ -20,6 +20,7 @@ from frutinovelas.services.audio_workflow import AudioWorkflowError, validate_au
 from frutinovelas.services.comfy import ComfyClient, ComfyError, cipher, identity_key, prepare_graph
 from frutinovelas.services.generation import ACTIVE, transition
 from frutinovelas.services.image_generation import finish_automatic_image, graph_contract, prepare_image_graph
+from frutinovelas.services.voice_workflow import VoiceWorkflowError, prepare_voice_graph, validate_voice_references
 
 log = logging.getLogger(__name__)
 
@@ -162,8 +163,15 @@ class GenerationWorker:
                 if not transition(self.factory, job.id, "uploading"):
                     return
                 audio_guides = p.get("audio_guides", []) if job.kind == "video" else []
+                voice_references = p.get("voice_references", []) if job.kind == "video" else []
                 prepared_audio = []
-                if audio_guides:
+                if voice_references:
+                    if audio_guides:
+                        raise VoiceWorkflowError("La escena mezcla voces de personajes y audios guía incompatibles.")
+                    validate_voice_references(voice_references)
+                    client.check_voice_support(p["graph"])
+                    prepared_audio = self.prepare_audio(voice_references)
+                elif audio_guides:
                     validate_audio_guides(audio_guides, p["duration"])
                     client.check_audio_support(p["graph"])
                     prepared_audio = self.prepare_audio(audio_guides)
@@ -206,12 +214,17 @@ class GenerationWorker:
                         if exc.status_code in (400, 401, 403, 404, 413, 415, 422):
                             raise AudioWorkflowError(str(exc)) from exc
                         raise
-                graph = (
-                    prepare_image_graph(
+                if job.kind == "image":
+                    graph = prepare_image_graph(
                         p["graph"], p["prompt"], p.get("cast", []), p["seed"], list(names.values()), job.id
                     )
-                    if job.kind == "image"
-                    else prepare_graph(
+                elif voice_references:
+                    graph = prepare_voice_graph(
+                        p["graph"], p["effective_prompt"], p["duration"], p["seed"],
+                        names["start"], names.get("end"), job.id, voice_references, audio_names,
+                    )
+                else:
+                    graph = prepare_graph(
                         p["graph"],
                         p.get("effective_prompt", p["prompt"]),
                         p["duration"],
@@ -222,7 +235,6 @@ class GenerationWorker:
                         audio_guides=audio_guides,
                         audio_names=audio_names,
                     )
-                )
                 if self.stop_event.is_set() or not transition(self.factory, job.id, "submitting"):
                     return
                 try:
@@ -339,7 +351,7 @@ class GenerationWorker:
                 result_mime="video/mp4" if suffix == ".mp4" else "video/webm",
                 result_sha256=digest.hexdigest(),
             )
-        except AudioWorkflowError as exc:
+        except (AudioWorkflowError, VoiceWorkflowError) as exc:
             transition(self.factory, job.id, "failed", str(exc), expected_states=("queued", "uploading"))
         finally:
             client.close()
@@ -354,7 +366,10 @@ class GenerationWorker:
                 return []
             with self.factory() as session:
                 asset = session.get(Asset, guide["asset_id"])
-                if asset is None or asset.kind != "audio" or asset.sha256 != guide["asset"]["sha256"]:
+                if (
+                    asset is None or asset.kind != "audio" or asset.sha256 != guide["asset"]["sha256"]
+                    or asset.duration_seconds != guide["asset"].get("duration_seconds")
+                ):
                     raise AudioWorkflowError("Falta el audio original de esta versión o cambió su identidad.")
                 try:
                     original = asset_path(self.settings, asset)
