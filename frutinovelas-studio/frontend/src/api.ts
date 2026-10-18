@@ -5,6 +5,7 @@ export type NarratedShot = {
   end_seconds: number
   text: string
   image_prompt: string
+  animation_prompt: string
   image_asset_id: string | null
   motion: 'zoom_in' | 'zoom_out' | 'pan_left' | 'pan_right' | 'still'
 }
