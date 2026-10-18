@@ -100,7 +100,7 @@ def cast_contract(cast: list[dict[str, Any]]) -> str:
         facts = " ".join(item for item in (identity, description) if item)
         binding.append(
             f"SUBJECT {index} — {names[index-1]}: exactly ONE on-screen instance. "
-            f"Reference image {index} represents this character ONLY. "
+            f"Reference image {index}: {names[index-1]}. Preserve this character identity. Reference image {index} represents this character ONLY. "
             f"{facts} Use this subject's own fruit shape, face, silhouette, hair and clothes."
         )
     return (
