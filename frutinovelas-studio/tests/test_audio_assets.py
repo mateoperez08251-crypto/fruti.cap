@@ -554,6 +554,6 @@ def test_audio_migration_preserves_legacy_images_voices_revisions_and_credential
         assert connection.scalar(text("SELECT parameters FROM scene_revisions")) == original_parameters
         assert connection.scalar(text("SELECT encrypted_token FROM comfy_connections")) == "preserved-ciphertext"
         assert any(row[3] == "voice_asset_id" and row[2] == "assets" for row in connection.execute(text("PRAGMA foreign_key_list(characters)")))
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0006"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0007"
     engine.dispose()
     assert len(list((tmp_path / "backups").glob("*.sqlite3"))) == 1
