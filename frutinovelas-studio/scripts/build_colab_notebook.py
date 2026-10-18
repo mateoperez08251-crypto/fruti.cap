@@ -722,7 +722,9 @@ if not gw_vivo():
     env.pop("FRUTI_GATEWAY_TOKEN", None)
     p = subprocess.Popen([sys.executable, str(KIT_DIR / "scripts" / "comfy_gateway.py"), "--listen", GATEWAY_LISTEN,
                           "--port", str(GATEWAY_PORT), "--upstream", LOCAL, "--workflows-dir", str(API_DIR),
-                          "--identity-file", str(DATA_DIR / "identity.json")],
+                          "--identity-file", str(DATA_DIR / "identity.json"),
+                           "--narration-dir", str(DATA_DIR / "narrated"),
+                           "--comfy-output-dir", str(DATA_DIR / "comfy_output")],
                          env=env, stdout=open(LOG_DIR / "gateway.log", "ab"), stderr=subprocess.STDOUT, start_new_session=True)
     PROCS["gateway"] = p.pid
     guardar_pids()
