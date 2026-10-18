@@ -191,3 +191,13 @@ El endpoint es `http://127.0.0.1:8766/mcp`. Funciona aunque ComfyUI esté apagad
 preparar prompts y ejecutar una generación son capacidades distintas. Las herramientas Studio requieren la API local abierta; generar requiere también Qwen activo en ComfyUI.
 Ver [uso completo](docs/PROMPT_STUDIO.md), [instrucciones para ChatGPT](docs/CHATGPT_DIRECTOR.md),
 [compatibilidad](docs/MODEL_COMPATIBILITY.md) y [fuentes consultadas](docs/PROMPT_RESEARCH.md).
+
+### MCP público temporal para probar con otras cuentas
+
+Abre **Conexión MCP → Prueba pública HTTPS** o consulta
+[la guía de prueba pública](docs/MCP_PUBLICO_PRUEBA.md).
+Desde Windows, con Studio iniciado, ejecuta `publicar_mcp_prueba.cmd`. La
+consola ofrece una URL HTTPS temporal para conectarla como servidor MCP remoto;
+no utiliza los permisos del túnel privado de OpenAI. La prueba es deliberadamente
+**sin autenticación** y expone herramientas de lectura, escritura y generación,
+por lo que solo se debe realizar con proyectos descartables y cerrar con Ctrl+C.
