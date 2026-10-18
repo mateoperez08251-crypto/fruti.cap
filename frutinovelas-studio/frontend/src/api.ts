@@ -115,6 +115,28 @@ export type SystemStatus = {
   ffmpeg: boolean
 }
 
+export type McpConnectionInfo = {
+  local_url: string
+  host: string
+  port: number
+  authentication: 'none'
+  shell: 'PowerShell' | 'Terminal'
+  http_command: string
+  stdio_command: string
+  claude_desktop_config: { mcpServers: Record<string, { command: string; args: string[]; env: Record<string, string> }> }
+  claude_config_path: string | null
+  api_token_configured: boolean
+}
+
+export type McpConnectionStatus = {
+  state: 'ready' | 'unreachable' | 'incompatible'
+  detail: string
+  server_name: string | null
+  tools_count: number | null
+  local_url: string
+  checked_at: string
+}
+
 export type ComfyConnection = {
   url: string
   configured: boolean
@@ -187,6 +209,8 @@ export const api = {
   approveSceneImage: (jobId: string, revision: number, role: 'start' | 'end') => request<Scene>(`/image-generations/${jobId}/approve`, json('POST', { expected_revision: revision, role })),
   checkPrompt: (data: PromptCheckInput) => request<PromptIssue[]>('/prompts/lint', json('POST', data)),
   status: (signal?: AbortSignal) => request<SystemStatus>('/system/status', { signal }),
+  mcpConnection: (signal?: AbortSignal) => request<McpConnectionInfo>('/mcp/connection', { signal }),
+  mcpStatus: (signal?: AbortSignal) => request<McpConnectionStatus>('/mcp/status', { signal }),
   comfyConnection: () => request<ComfyConnection>('/comfy/connection'),
   saveComfyConnection: (url: string, token: string) =>
     request<ComfyConnection>('/comfy/connection', json('PUT', { url, token })),

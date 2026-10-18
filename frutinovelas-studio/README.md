@@ -11,8 +11,17 @@ abierta mientras lo utilizas. Los datos existentes se migran al arrancar.
 mediante fast-forward y conserva los cambios locales. `actualizar.cmd` permite comprobar
 manualmente. Consulta [actualización segura](docs/ACTUALIZACIONES.md).
 
-Para los comandos de CMD, el MCP local y el túnel de ChatGPT, sigue
+En la barra lateral, **Conexión MCP** abre **Conectar ChatGPT o Claude**. El panel
+ofrece los comandos y la URL local para ChatGPT mediante su túnel, el JSON de
+configuración para Claude Desktop y un diagnóstico del servidor MCP local.
+Consulta [Conexión MCP desde Studio](docs/CONEXION_MCP.md) para elegir el cliente.
+Los pasos completos de Windows y del túnel de ChatGPT están en
 [CONEXION_MCP_Y_TUNNEL.txt](docs/CONEXION_MCP_Y_TUNNEL.txt).
+
+Después de actualizar, ejecuta `iniciar.cmd` para recompilar la interfaz y reinicia
+el MCP que estuviera abierto. El panel conserva la conexión y las credenciales
+existentes; copiar una configuración o comprobar el servidor no inicia sesión en
+ChatGPT o Claude ni demuestra que ese cliente ya esté conectado.
 
 Alternativa manual:
 

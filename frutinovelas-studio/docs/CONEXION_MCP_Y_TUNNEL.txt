@@ -1,9 +1,17 @@
 FRUTI.CAP — INICIO EN WINDOWS Y CONEXIÓN MCP CON CHATGPT
-Revisado: 15 de octubre de 2026
+Revisado: 18 de octubre de 2026
 
 Esta guía corresponde al código de este repositorio. Sustituye las rutas de
-ejemplo por tus carpetas reales. Los comandos de Windows se pegan en CMD.
+ejemplo por tus carpetas reales. Los ejemplos de Windows de esta guía se pegan en CMD.
 Ejecuta una línea cada vez y comprueba que terminó sin error antes de seguir.
+
+En la barra lateral de Studio, Conexión MCP abre el panel Conectar ChatGPT o
+Claude. Copia desde ahí la URL y el comando adaptados a tu instalación; el comando
+generado por el panel para Windows se ejecuta en PowerShell. Esta
+guía detalla la opción ChatGPT mediante túnel; para Claude Desktop por stdio,
+consulta docs/CONEXION_MCP.md. El panel no configura cuentas ni arranca procesos.
+Si todavía no aparece, actualiza el código y ejecuta iniciar.cmd para recompilar
+la interfaz; después recarga Studio y reinicia el MCP anterior.
 
 QUÉ HACE CADA PARTE
 
@@ -99,9 +107,14 @@ interfaz, Node.js y Studio no son requisitos del servidor de prompts.
 
 VENTANA 2 DE CMD: INICIAR EL MCP LOCAL
 
+Puedes usar el comando generado en Conexión MCP, en PowerShell si estás en Windows.
+Usa el Python y el directorio reales de Studio; --directory carga el .env de ese
+proyecto antes de configurar el servidor. El ejemplo siguiente se ejecuta en CMD
+y usa la carpeta anterior y los puertos por defecto:
+
   cd /d "C:\proyectos\fruti.cap\frutinovelas-studio"
   py -3.12 -m uv sync --frozen --link-mode copy
-  py -3.12 -m uv run --frozen frutinovelas-mcp --transport streamable-http --host 127.0.0.1 --port 8766
+  py -3.12 -m uv run --frozen frutinovelas-mcp --directory "C:\proyectos\fruti.cap\frutinovelas-studio" --transport streamable-http --host 127.0.0.1 --port 8766
 
 Déjalo abierto. La dirección MCP es http://127.0.0.1:8766/mcp.
 Sin --transport streamable-http se usa stdio, que no abre ese puerto.
@@ -117,8 +130,11 @@ MCP por separado puedes elegir --port 8767 y cambiar también su URL en el
 perfil de tunnel-client. No apuntes ambos servicios al mismo puerto.
 
 Una página vacía o un error 405 al abrir /mcp en el navegador no basta para
-decidir si MCP funciona: MCP intercambia mensajes de protocolo. La prueba
-final consiste en listar herramientas y ejecutar una llamada desde ChatGPT.
+decidir si MCP funciona: MCP intercambia mensajes de protocolo. El diagnóstico
+del panel inicializa una sesión y lista las herramientas del HTTP local; no
+significa que ChatGPT o Claude ya estén conectados. La prueba final consiste
+en ejecutar una llamada desde el cliente. Claude Desktop por stdio no necesita
+este servidor HTTP para funcionar.
 
 COMFYUI: ENCENDER EL SERVIDOR GPU CUANDO VAYAS A RENDERIZAR
 
@@ -278,7 +294,9 @@ ALCANCE DE ESTA GUÍA
 Los comandos describen el repositorio y la documentación oficial consultada.
 La creación del túnel, la asociación de cuentas y la llamada real en tu PC
 deben comprobarse en tu entorno. El túnel de OpenAI se utiliza aquí con ChatGPT;
-esta guía no afirma que configure conexiones de Claude u otros clientes.
+para Claude Desktop usa la configuración stdio del panel y docs/CONEXION_MCP.md.
+Claude web requiere un servidor remoto HTTPS protegido, que este panel aún no
+prepara; no reutilices para él la URL local ni el túnel privado de OpenAI.
 
 FUENTES
 

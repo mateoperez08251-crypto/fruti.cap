@@ -1,7 +1,7 @@
 # Autenticación y credenciales de FRUTINOVELAS Studio
 
-Esta explicación contrasta el código con los documentos del repositorio. La base
-auditada es el commit 84af42e4da879cb19796822c5343c51dabe2580f. La incorporación de
+Esta explicación contrasta el código con los documentos del repositorio. La revisión
+inicial usó el commit 84af42e4da879cb19796822c5343c51dabe2580f. La incorporación de
 audios conserva estos mecanismos: una subida de audio pasa por la misma API local
 y su envío a ComfyUI utiliza el cliente autenticado del trabajo.
 
@@ -62,6 +62,19 @@ El servidor no configura un proveedor de autenticación ni valida
 FRUTINOVELAS_MCP_TOKEN. La documentación atribuye las comprobaciones Host/Origin al
 SDK; [test_mcp_http.py](../tests/test_mcp_http.py) prueba el rechazo de un Host no
 confiable con 421 y una conexión MCP local sin token propio.
+
+El panel **Conexión MCP** no añade OAuth ni un inicio de sesión. Lee
+`GET /api/v1/mcp/connection` para obtener rutas, comandos y configuración sin
+tokens. `GET /api/v1/mcp/status` inicializa una sesión MCP HTTP local y lista
+herramientas; no verifica una cuenta de ChatGPT o Claude ni llama a inferencia.
+Estos endpoints siguen las reglas de lectura de la API local descritas arriba.
+
+Para Claude Desktop, el JSON generado usa el Python de Studio, el puerto API y
+`--directory` con la carpeta del proyecto. El MCP lee así su `.env` antes de
+cargar Settings; el token API, si existe ahí, no se copia en el JSON ni se
+devuelve al navegador. El cliente arranca el MCP por stdio. Esta configuración
+no equivale a publicar un servidor remoto para Claude web. Véase
+[Conexión MCP desde Studio](CONEXION_MCP.md).
 
 studio_request(), en [mcp_studio.py](../src/frutinovelas/mcp_studio.py), llama a
 http://127.0.0.1:{api_port}/api/v1/ y añade FRUTINOVELAS_API_TOKEN si existe.

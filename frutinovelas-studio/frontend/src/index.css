@@ -196,6 +196,17 @@ select {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.nav-mcp {
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.nav-mcp span { display: flex; flex-direction: column; align-items: flex-start; }
+.nav-mcp strong { font-size: 13px; font-weight: 600; }
+.nav-mcp small { font-size: 11px; color: var(--text-2); }
 
 .main {
   overflow-y: auto;
@@ -609,6 +620,37 @@ select {
   justify-content: flex-end;
   gap: 10px;
 }
+.mcp-backdrop { padding: 16px; overflow-y: auto; }
+.mcp-dialog {
+  width: min(780px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-width: 0;
+}
+.mcp-dialog-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.mcp-dialog-heading .btn { flex-shrink: 0; }
+.mcp-dialog-heading p { margin: 8px 0 0; }
+.mcp-dialog h2:focus { outline: none; }
+.mcp-dialog h3 { font-size: 16px; }
+.mcp-dialog p { overflow-wrap: anywhere; }
+.mcp-clients, .mcp-copy-heading, .mcp-doc-links { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.mcp-clients .btn { flex: 1 1 140px; }
+.mcp-instructions, .mcp-diagnostic, .mcp-reading-test { display: flex; flex-direction: column; gap: 12px; }
+.mcp-instructions p, .mcp-diagnostic p, .mcp-reading-test p { margin: 0; }
+.mcp-steps { margin: 0; padding-left: 23px; display: grid; gap: 10px; }
+.mcp-copy-heading { justify-content: space-between; }
+.mcp-copy-heading label { font-weight: 500; color: var(--text-2); font-size: 12px; }
+.mcp-code { min-height: 0; max-height: 260px; font-family: var(--font-mono); font-size: 12px; line-height: 1.6; resize: vertical; }
+.mcp-code[rows="1"] { resize: none; }
+.mcp-doc-link { color: var(--sky); display: inline-flex; align-items: center; gap: 5px; text-decoration: underline; text-underline-offset: 3px; }
+.mcp-doc-links { gap: 8px 18px; font-size: 13px; }
+.mcp-download, .mcp-diagnostic > .btn { align-self: flex-start; }
+.mcp-diagnostic, .mcp-reading-test { border-top: 1px solid var(--border); padding-top: 18px; }
+.mcp-check-result { border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 14px; display: grid; gap: 8px; }
+.mcp-check-result.ready { border-color: hsl(88 62% 62% / 0.5); }
+.mcp-check-result.ready > strong { color: var(--lime); }
+.mcp-check-result.warn > strong { color: var(--mango); }
 @keyframes fade {
   from {
     opacity: 0;
@@ -1156,10 +1198,19 @@ details.advanced .adv-body {
 @media (max-width: 760px) {
   .app {
     grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr) var(--statusbar-h);
   }
   .sidebar {
-    display: none;
+    display: flex;
+    padding: 8px 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
   }
+  .sidebar > :not(.nav-mcp) { display: none; }
+  .nav-mcp span { flex-direction: row; align-items: center; gap: 12px; }
+  .mcp-backdrop { padding: 8px; }
+  .mcp-dialog { padding: 18px; max-height: calc(100dvh - 16px); }
+  .mcp-dialog h2 { font-size: 18px; }
   .page {
     padding: 20px 16px 40px;
   }
