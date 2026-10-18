@@ -19,7 +19,7 @@ from frutinovelas.db import get_session
 from frutinovelas.models import Asset, NarratedVideo, Project
 from frutinovelas.schemas.narrated import NarratedCreate, NarratedUpdate, NarratedRenderRequest, NarratedShot
 from frutinovelas.services.assets import asset_path, AssetError
-from frutinovelas.services.narrated import start_video
+from frutinovelas.services.narrated_remote import start_remote_video
 
 router = APIRouter(tags=["videos narrados"])
 
@@ -196,7 +196,7 @@ def render(id:str,body:NarratedRenderRequest,session:Session=Depends(get_session
     _shots(session,row.shots,_audio(session,row.audio_asset_id).duration_seconds,require_images=True)
     row.state="queued";row.error="";row.progress=0
     session.commit()
-    start_video(row.id)
+    start_remote_video(row.id)
     return _out(session,row)
 
 
