@@ -20,6 +20,7 @@ from frutinovelas.services.audio_workflow import AudioWorkflowError, validate_au
 from frutinovelas.services.comfy import ComfyClient, ComfyError, cipher, identity_key, prepare_graph
 from frutinovelas.services.generation import ACTIVE, transition
 from frutinovelas.services.image_generation import finish_automatic_image, graph_contract, prepare_image_graph
+from frutinovelas.services.reference_prep import isolated_reference
 from frutinovelas.services.voice_workflow import VoiceWorkflowError, prepare_voice_graph, validate_voice_references
 
 log = logging.getLogger(__name__)
@@ -196,9 +197,13 @@ class GenerationWorker:
                         with Image.open(original) as im:
                             oriented = ImageOps.exif_transpose(im)
                             if job.kind == "image":
-                                reference = oriented.convert("RGB")
-                                reference.thumbnail((1024, 1024))
-                                reference.save(prepared)
+                                reference_cast = p.get("cast", [])
+                                index = int(role)  # 0-based cast index, saved in job snapshot.
+                                preparation = (
+                                    reference_cast[index].get("reference_preparation")
+                                    if 0 <= index < len(reference_cast) else None
+                                )
+                                isolated_reference(oriented, preparation).save(prepared)
                             else:
                                 ImageOps.fit(oriented.convert("RGB"), (576, 1024)).save(prepared)
                         names[role] = client.upload(prepared)

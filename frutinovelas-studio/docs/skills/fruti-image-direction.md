@@ -17,3 +17,18 @@ Entregar prompt positivo, cambios/preservaciones en edición y lista breve de co
 Para salida estructurada, usar `ImageDraft` de `src/frutinovelas/prompts.py` y el ejemplo
 `examples/prompts/qwen_edit_cocardo.json` del estudio. Preparar el prompt no ejecuta Qwen en la app.
 No cambiar pasos, CFG, LoRAs o cuantización sin inspeccionar el flujo realmente cargado.
+
+
+## Reparto e identidad, especialmente con fichas de varias vistas
+
+Antes de enviar imágenes a Qwen: seleccionar exactamente los personajes que
+aparecen en el fotograma; diferenciar cada identidad por forma, proporciones,
+rostro y vestuario, usando una sola pose por ficha multivista (el worker prepara
+la vista frontal en trabajos nuevos). Especificar el número exacto de
+personajes visibles y una posición única por personaje, sin confundir
+vistas alternativas de la ficha con extras en la escena. En escenas policiales
+no inventar agentes de fondo o dobles para llenar espacio. Ver
+`services/reference_prep.py` y la guía `PERSONAJES_Y_ESCENAS.md`.
+
+El texto del prompt no verifica el resultado: inspeccionar la imagen y no
+aprobar cuando haya personajes repetidos, extras o identidades intercambiadas.

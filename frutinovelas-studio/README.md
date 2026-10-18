@@ -249,3 +249,16 @@ abrir la imagen a tamaño completo y **Aprobar y usar de inicio** individualment
 Sin aprobación, la escena continúa mostrando `sin_imagen` aunque Qwen haya
 terminado correctamente. Se consultan resultados de la API existente: la
 vista no duplica archivos ni genera nada por sí sola.
+
+
+### Identidad Qwen con fichas multivista
+
+El worker aísla automáticamente una **sola pose frontal** de fichas
+de personaje antes de enviar nuevas solicitudes Qwen Edit. Las tres fichas
+actuales de Darío, Bruno y Mateo tienen recortes por hash ya verificados;
+otras fichas multivista convencionales usan una heurística revisable.
+La capa adicional de prompt efectivo fija **cantidad exacta, identidad y
+correspondencia de cada imagen de referencia**. No altera las fichas
+originales, los prompts literales ni los resultados anteriores. La calidad
+requiere revisar cada imagen, y una imagen errónea debe regenerarse
+explícitamente, nunca aprobarse de manera silenciosa.
