@@ -1,13 +1,14 @@
 {
   "schema_version": "1.0",
   "generated_at": "2026-10-14T23:10:00Z",
-  "note": "Revisiones, tamaños y SHA-256 consultados en la API de Hugging Face el 2026-10-14. Ref2VA añadido el 2026-10-17, verificado contra el puntero LFS de la misma revisión fijada. La libreta vuelve a comprobarlos antes de descargar.",
+  "note": "Revisiones, tamaÃ±os y SHA-256 consultados en la API de Hugging Face el 2026-10-14. Ref2VA aÃ±adido el 2026-10-17, verificado contra el puntero LFS de la misma revisiÃ³n fijada. La libreta vuelve a comprobarlos antes de descargar. Qwen 2.1 BF16: revisión, tamaños y SHA-256 LFS verificados el 2026-10-18; no se descargaron pesos para esta actualización.",
   "repos": {
     "Comfy-Org/MiniMax-H3": "e5eb578a89295337b8ff433a035929ce0279e0b6",
     "Comfy-Org/Qwen-Image_ComfyUI": "1f12b17be14c89b026c51a91d67c32f84bb047bc",
     "Comfy-Org/Qwen-Image-Edit_ComfyUI": "f68ace85e60b4a02a323e394253731947657b7d2",
     "lightx2v/Qwen-Image-2512-Lightning": "a52649c9d0f6e1a248bff13f0df33bb8a2abdb52",
-    "lightx2v/Qwen-Image-Edit-2511-Lightning": "d74eba145674fd7e31b949324e148e21e7118abd"
+    "lightx2v/Qwen-Image-Edit-2511-Lightning": "d74eba145674fd7e31b949324e148e21e7118abd",
+    "Comfy-Org/Qwen-Image-2.1": "a8342359c61979b06a8dafb1a47991fe1f30e994"
   },
   "components": {
     "h3_diffusion_fl2va_pruned_int8": {
@@ -114,6 +115,27 @@
       "dest": "loras",
       "size": 849608296,
       "sha256": "22226e8d05d354bb356627d428809f5afd7819399b077238a2b70a82883a904f"
+    },
+    "qwen21_diffusion_bf16": {
+      "repo_id": "Comfy-Org/Qwen-Image-2.1",
+      "path": "diffusion_models/qwen_image_2.1_bf16.safetensors",
+      "dest": "diffusion_models",
+      "size": 14230280616,
+      "sha256": "89f4158d066cc33906a199fca85634f766892dd78f49b6698dabf187ac86c4bc"
+    },
+    "qwen21_encoder_bf16": {
+      "repo_id": "Comfy-Org/Qwen-Image-2.1",
+      "path": "text_encoders/qwen3vl_8b_bf16.safetensors",
+      "dest": "text_encoders",
+      "size": 17534334616,
+      "sha256": "68bdc82bc1b66851162ae656225e7e2068166b603db19bd5d5a3b90eb12669a9"
+    },
+    "qwen21_vae_bf16": {
+      "repo_id": "Comfy-Org/Qwen-Image-2.1",
+      "path": "vae/qwen_image_2.1_vae_bf16.safetensors",
+      "dest": "vae",
+      "size": 675509688,
+      "sha256": "bb21f7473051e1ac368515dd3f2e15cd44d7a11748ee8823e1ddca3e4876b7c9"
     }
   },
   "profiles": {
@@ -128,7 +150,7 @@
       "loader_overrides": {}
     },
     "h3_quality_bf16_optional": {
-      "label": "H3 alta precisión (opcional): FL2VA BF16 + encoder BF16 + VAE FP16 + audio FP32",
+      "label": "H3 alta precisiÃ³n (opcional): FL2VA BF16 + encoder BF16 + VAE FP16 + audio FP32",
       "components": [
         "h3_diffusion_fl2va_pruned_bf16",
         "h3_text_encoder_bf16",
@@ -160,7 +182,7 @@
       "loader_overrides": {}
     },
     "qwen_edit2511_fp8mixed": {
-      "label": "Qwen-Image-Edit-2511 (edición, FP8 mixed, plantilla oficial)",
+      "label": "Qwen-Image-Edit-2511 (ediciÃ³n, FP8 mixed, plantilla oficial)",
       "components": [
         "qwen_edit2511_diffusion_fp8mixed",
         "qwen_text_encoder_2_5_vl_7b_fp8",
@@ -171,7 +193,7 @@
       "loader_overrides": {}
     },
     "qwen_edit2511_bf16": {
-      "label": "Qwen-Image-Edit-2511 (edición, difusión BF16)",
+      "label": "Qwen-Image-Edit-2511 (ediciÃ³n, difusiÃ³n BF16)",
       "components": [
         "qwen_edit2511_diffusion_bf16",
         "qwen_text_encoder_2_5_vl_7b_fp8",
@@ -182,6 +204,17 @@
       "loader_overrides": {
         "qwen_image_edit_2511_fp8mixed.safetensors": "qwen_image_edit_2511_bf16.safetensors"
       }
+    },
+    "qwen21_bf16": {
+      "label": "Qwen-Image-2.1 BF16: generación y referencias, 1152×2048, 40 pasos",
+      "components": [
+        "qwen21_diffusion_bf16",
+        "qwen21_encoder_bf16",
+        "qwen21_vae_bf16"
+      ],
+      "loader_overrides": {},
+      "workflow_builder": "frutinovelas.services.qwen21_workflow",
+      "license": "qwen-research"
     }
   }
 }

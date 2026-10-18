@@ -1,5 +1,10 @@
 # FRUTINOVELAS Studio
 
+Las imágenes nuevas usan **Qwen-Image-2.1 BF16, 1152×2048 y 40 pasos** cuando
+el servidor publica el nuevo perfil. La libreta Colab y el kit remoto lo activan
+por defecto. Actualiza ambos lados y vuelve a comprobar la conexión.
+Consulta [actualización, requisitos y regreso al modelo anterior](docs/QWEN_21.md).
+
 ## Abrir el programa en Windows
 
 Para repetir el arranque que ya funcionó en tu PC, consulta

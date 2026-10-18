@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from frutinovelas.models import Asset, ComfyConnection, GenerationJob
 from frutinovelas.schemas import SceneUpdate
-from frutinovelas.services import scenes
+from frutinovelas.services import qwen21_workflow, scenes
 from frutinovelas.services.comfy import ComfyClient, ComfyError, identity_key
 from frutinovelas.services.generation import connection_token
 from frutinovelas.services.reference_prep import cast_contract, reference_preparation
@@ -57,7 +57,10 @@ def graph_contract(graph, edit):
     positive = graph[sampler]["inputs"].get("positive")
     if not isinstance(positive, list) or len(positive) != 2:
         raise ComfyError("No se reconoce el condicionamiento positivo Qwen.")
-    kind = "TextEncodeQwenImageEditPlus" if edit else "CLIPTextEncode"
+    modern = any(graph[id].get("class_type") == "TextEncodeQwenImage21" for id in active)
+    kind = (
+        "TextEncodeQwenImage21" if modern else ("TextEncodeQwenImageEditPlus" if edit else "CLIPTextEncode")
+    )
     encoders = [id for id in ancestors(graph, positive[0]) if graph[id].get("class_type") == kind]
     if len(encoders) != 1:
         raise ComfyError("No se reconoce el codificador de texto del flujo Qwen publicado.")
@@ -70,6 +73,7 @@ def prepare_image_graph(graph, prompt, cast, seed, names, job_id):
     if len(cast) != len(names) or len(cast) > 2:
         raise ComfyError("No coinciden los personajes con las referencias subidas.")
     g = copy.deepcopy(graph)
+    modern = g[encoder]["class_type"] == "TextEncodeQwenImage21"
     # The editor's literal prompt is preserved. Add deterministic, enforceable-looking
     # cast constraints only to the effective graph submitted to Qwen.
     positive = prompt + cast_contract(cast)
@@ -81,18 +85,38 @@ def prepare_image_graph(graph, prompt, cast, seed, names, job_id):
                 raise ComfyError("El flujo utiliza un ID reservado para referencias.")
             g[id] = {"class_type": "LoadImage", "inputs": {"image": name}}
         for node in g.values():
-            if node.get("class_type") == "TextEncodeQwenImageEditPlus":
+            if node.get("class_type") == "TextEncodeQwenImage21":
+                for key in list(node["inputs"]):
+                    if key == "images" or key.startswith("images."):
+                        node["inputs"].pop(key)
+                for i, _name in enumerate(names, 1):
+                    node["inputs"][f"images.image_{i}"] = [f"fruti_reference_{i}", 0]
+            elif node.get("class_type") == "TextEncodeQwenImageEditPlus":
                 for i in range(1, 4):
                     node["inputs"].pop(f"image{i}", None)
                     if i <= len(names):
                         node["inputs"][f"image{i}"] = [f"fruti_reference_{i}", 0]
-    g[encoder]["inputs"]["prompt" if edit else "text"] = positive
+    if modern:
+        # Explicit model-native reference indices; keep the saved prompt literal.
+        positive += "".join(
+            f" <image{i}> is the identity reference for {c.get('name', 'character')} in the new scene."
+            for i, c in enumerate(cast, 1)
+        )
+        if not edit:
+            for key in list(g[encoder]["inputs"]):
+                if key == "images" or key.startswith("images."):
+                    g[encoder]["inputs"].pop(key)
+    g[encoder]["inputs"]["prompt" if edit or modern else "text"] = positive
     # Compose a new scene in the video canvas; reference images are identity conditioning.
     if "fruti_canvas" in g:
         raise ComfyError("El flujo utiliza un ID reservado para el canvas.")
     g["fruti_canvas"] = {
-        "class_type": "EmptySD3LatentImage",
-        "inputs": {"width": 576, "height": 1024, "batch_size": 1},
+        "class_type": "EmptyLatentImage" if modern else "EmptySD3LatentImage",
+        "inputs": {
+            "width": qwen21_workflow.WIDTH if modern else 576,
+            "height": qwen21_workflow.HEIGHT if modern else 1024,
+            "batch_size": 1,
+        },
     }
     g[sampler]["inputs"]["latent_image"] = ["fruti_canvas", 0]
     g[sampler]["inputs"]["seed"] = seed
@@ -255,7 +279,12 @@ def enqueue_image(
             raise ComfyError(
                 "Cambió el servidor de este capítulo. El proceso se detiene sin reasignar trabajos."
             )
-        filename = EDIT_WORKFLOW if cast else T2I_WORKFLOW
+        modern_filename = qwen21_workflow.EDIT_WORKFLOW if cast else qwen21_workflow.T2I_WORKFLOW
+        filename = (
+            modern_filename
+            if modern_filename in (identity.get("workflows") or {})
+            else (EDIT_WORKFLOW if cast else T2I_WORKFLOW)
+        )
         expected = (identity.get("workflows") or {}).get(filename)
         if not expected:
             raise ComfyError(f"El servidor no publica {filename}. Activa ese perfil Qwen en RunPod.")
