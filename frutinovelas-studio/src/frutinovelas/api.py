@@ -38,6 +38,7 @@ from frutinovelas.routes import (
     characters,
     generation,
     images,
+    mcp_connection,
     projects,
     prompts,
     renders,
@@ -130,7 +131,7 @@ def create_app() -> FastAPI:
                 return JSONResponse({"detail": "Se requiere autorización."}, status_code=401)
         return await call_next(request)
 
-    for module in (system, projects, scenes, assets, generation, prompts, characters, images, renders):
+    for module in (system, projects, scenes, assets, generation, prompts, characters, images, renders, mcp_connection):
         app.include_router(module.router, prefix=API_PREFIX)
 
     ui = frontend_dir()
@@ -175,6 +176,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-browser", action="store_true", help="no abrir el navegador")
     parser.add_argument("--log-level", default="info", choices=["debug", "info", "warning", "error"])
     args = parser.parse_args(argv)
+
+    # El asistente MCP y los servicios deben anunciar el puerto real de esta instancia.
+    settings.api_host = args.host
+    settings.api_port = args.port
 
     logging.basicConfig(level=args.log_level.upper(), format="%(levelname)s %(name)s: %(message)s")
     shown_host = "127.0.0.1" if args.host in ("0.0.0.0", "::") else args.host

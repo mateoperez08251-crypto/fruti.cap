@@ -3,10 +3,13 @@
 import argparse
 import ipaddress
 import json
+import os
+from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 
+from frutinovelas.config import get_settings, reset_settings_cache
 from frutinovelas.guidance import Preset, Task, get_guidance, guidance_catalog, read_guide
 from frutinovelas.mcp_studio import register_studio_tools
 from frutinovelas.prompts import H3Draft, ImageDraft, LintRequest, compile_h3, compile_image, lint_h3
@@ -104,14 +107,30 @@ def _port(value: str) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="MCP de guías y prompts, independiente de ComfyUI.")
     parser.add_argument("--transport", choices=["stdio", "streamable-http"], default="stdio")
-    parser.add_argument("--host", type=_loopback_host, default="127.0.0.1")
-    parser.add_argument("--port", type=_port, default=8766)
+    parser.add_argument("--directory", type=Path, help="Carpeta de Studio cuya configuración .env debe utilizarse.")
+    parser.add_argument("--api-port", type=_port, help="Puerto efectivo de la API local de Studio.")
+    parser.add_argument("--host", type=_loopback_host)
+    parser.add_argument("--port", type=_port)
     args = parser.parse_args(argv)
+    if args.directory is not None:
+        try:
+            os.chdir(args.directory.expanduser().resolve(strict=True))
+        except OSError:
+            parser.error("No se pudo abrir la carpeta indicada en --directory.")
+        reset_settings_cache()
+    settings = get_settings()
+    if args.api_port is not None:
+        settings.api_port = args.api_port
+    try:
+        host = _loopback_host(args.host if args.host is not None else settings.mcp_host)
+        port = _port(str(args.port if args.port is not None else settings.mcp_port))
+    except argparse.ArgumentTypeError as exc:
+        parser.error(str(exc))
     options = {}
     if args.transport == "streamable-http":
         options = {
-            "host": args.host,
-            "port": args.port,
+            "host": host,
+            "port": port,
             "streamable_http_path": "/mcp",
             "stateless_http": True,
         }

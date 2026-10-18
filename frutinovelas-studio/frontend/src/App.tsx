@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { Clapperboard, FolderOpen, Home, PlugZap } from 'lucide-react'
+import { Clapperboard, FolderOpen, Home, MessagesSquare, PlugZap } from 'lucide-react'
+import { useCallback, useRef, useState, type RefObject } from 'react'
 import { NavLink, Route, Routes, useParams } from 'react-router-dom'
 import { api } from './api'
 import { StatusBar } from './components/StatusBar'
@@ -7,8 +8,9 @@ import { ChapterPage } from './pages/ChapterPage'
 import { ProjectPage } from './pages/ProjectPage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { ConnectionPage } from './pages/ConnectionPage'
+import { McpConnectionDialog } from './components/McpConnectionDialog'
 
-function Sidebar() {
+function Sidebar({ onMcpOpen, mcpButton, mcpOpen }: { onMcpOpen: () => void; mcpButton: RefObject<HTMLButtonElement | null>; mcpOpen: boolean }) {
   const { data: projects } = useQuery({ queryKey: ['projects'], queryFn: () => api.projects() })
   return (
     <aside className="sidebar" aria-label="Navegación">
@@ -27,6 +29,11 @@ function Sidebar() {
       <NavLink to="/conexion" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
         <PlugZap size={16} /> <span>Conexión ComfyUI</span>
       </NavLink>
+      <button id="nav-mcp" ref={mcpButton} type="button" className="nav-item nav-mcp" onClick={onMcpOpen}
+        aria-haspopup="dialog" aria-expanded={mcpOpen} aria-controls={mcpOpen ? 'mcp-connection-dialog' : undefined}>
+        <MessagesSquare size={16} aria-hidden="true" />
+        <span><strong>Conexión MCP</strong><small>ChatGPT · Claude</small></span>
+      </button>
       {projects && projects.length > 0 && <div className="nav-label">Tus proyectos</div>}
       {projects?.map((p) => (
         <NavLink
@@ -53,9 +60,13 @@ function ProjectRoute() {
 }
 
 export default function App() {
+  const [mcpOpen, setMcpOpen] = useState(false)
+  const mcpButton = useRef<HTMLButtonElement>(null)
+  const closeMcp = useCallback(() => setMcpOpen(false), [])
   return (
-    <div className="app">
-      <Sidebar />
+    <>
+    <div className="app" inert={mcpOpen}>
+      <Sidebar onMcpOpen={() => setMcpOpen(true)} mcpButton={mcpButton} mcpOpen={mcpOpen} />
       <main className="main">
         <Routes>
           <Route path="/" element={<ProjectsPage />} />
@@ -77,5 +88,7 @@ export default function App() {
       </main>
       <StatusBar />
     </div>
+    {mcpOpen && <McpConnectionDialog onClose={closeMcp} returnFocus={mcpButton} />}
+    </>
   )
 }
