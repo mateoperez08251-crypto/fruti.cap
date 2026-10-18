@@ -7,7 +7,7 @@ Modo independiente de los capítulos H3. La narración completa determina la dur
 2. Pega opcionalmente una transcripción o un guion (esta primera versión no transcribe ni sintetiza voces automáticamente).
 3. Crea el video, divide las tomas, escribe la acción y el prompt visual para cada toma.
 4. Asigna imágenes de tu PC o recursos de la biblioteca mediante MCP; elige zoom, paneo o imagen fija.
-5. Guarda y pulsa **Exportar MP4**. FFmpeg monta las imágenes y coloca la narración completa como audio principal.
+5. Guarda y pulsa **Exportar MP4**. Studio envía los recursos al gateway autenticado donde se aloja ComfyUI (RunPod o Colab). Allí FFmpeg monta los planos y añade el audio principal. Studio descarga solamente el MP4 terminado.
 
 ## MCP para ChatGPT / Claude
 - list_narrated_videos(project_id): obtiene los videos del proyecto.
@@ -23,9 +23,9 @@ Los prompts de imagen no activan su generación automáticamente. Puedes usar la
 - Hasta 300 segundos y 90 tomas; la cronología completa debe cubrir el audio sin huecos ni solapamientos.
 - Se requiere FFmpeg y FFprobe. El tamaño máximo de subida sigue la configuración local.
 - Las imágenes se cargan por ID registrado dentro del directorio de datos. No se permiten rutas arbitrarias.
-- La exportación es local; el MP4 usa H.264 y AAC. No requiere inferencia H3.
+- La exportación ocurre remotamente en RunPod o Colab, junto a ComfyUI; el MP4 usa H.264 y AAC. Studio solo coordina, consulta progreso y descarga el video final. No requiere inferencia H3 para los movimientos sencillos.
 - La alineación es manual o asistida a partir de una transcripción aportada; no se afirma reconocer el contenido hablado a partir del audio.
-- El proceso se ejecuta en un hilo local: no garantiza que continúe tras apagar Studio. Ante interrupción, reiniciar la exportación después de recuperar el trabajo.
+- El montaje remoto tiene estado propio en el gateway; si se reinicia Studio, el trabajo remoto puede continuar, pero la descarga se recupera iniciando una nueva exportación. Si se reinicia el gateway, la tarea queda marcada como fallida y puede enviarse otra vez. Para RunPod recrea el kit remoto y reinicia gateway; para Colab regenera la libreta con build_colab_notebook.py y ejecuta la conexión de nuevo.
 
 ## Comprobaciones
 uv run pytest tests/test_narrated.py
