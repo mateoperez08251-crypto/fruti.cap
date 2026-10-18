@@ -15,7 +15,7 @@ Modo independiente de los capítulos H3. La narración completa determina la dur
 - save_narrated_storyboard(video_id, expected_revision, shots, transcript?): guarda prompts, IDs de imagen, movimientos y marcas de tiempo; no invoca GPU.
 - render_narrated_video(video_id, expected_revision): exporta solamente tras petición explícita.
 
-Cada toma contiene start_seconds, end_seconds, text, image_prompt, image_asset_id y motion. Los valores de motion son zoom_in, zoom_out, pan_left, pan_right o still.
+Cada toma contiene start_seconds, end_seconds, text, image_prompt, animation_prompt, image_asset_id y motion. Los valores de motion son zoom_in, zoom_out, pan_left, pan_right o still.
 
 Los prompts de imagen no activan su generación automáticamente. Puedes usar la preparación de prompts Qwen y la importación MCP ya disponibles en Studio, y después asignar los IDs reales de las imágenes.
 
