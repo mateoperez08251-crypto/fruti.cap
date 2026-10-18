@@ -115,7 +115,7 @@ def download_https(url: str, limit: int) -> bytes:
 
 def import_image(session, request_id: str, filename: str, mime_type: str | None,
                  content_base64: str | None, url: str | None,
-                 downloader=download_https) -> dict:
+                 downloader=None) -> dict:
     try:
         identifier = str(UUID(request_id))
     except ValueError as exc:
@@ -124,7 +124,9 @@ def import_image(session, request_id: str, filename: str, mime_type: str | None,
         raise ImportErrorImage("Indica exactamente una fuente: content_base64 o url.")
     if mime_type and mime_type.lower() not in _ALLOWED:
         raise ImportErrorImage("MIME no admitido. Usa image/png, image/jpeg o image/webp.")
-    filename = filename.replace("\\", "/").split("/")[-1].strip()[:200] or "imagen"
+    if "/" in filename or "\\\\" in filename or "\\" in filename:
+        raise ImportErrorImage("El nombre no puede contener rutas.")
+    filename = filename.strip()[:200] or "imagen"
     if not re.fullmatch(r"[\w .()\-áéíóúÁÉÍÓÚñÑ]+", filename):
         raise ImportErrorImage("El nombre del archivo contiene caracteres no admitidos.")
     if content_base64 is not None:
@@ -148,9 +150,17 @@ def import_image(session, request_id: str, filename: str, mime_type: str | None,
         return {**AssetOut.model_validate(asset).model_dump(mode="json"), "created": False, "reused": True,
                 "inspect_tool": "inspect_studio_image", "assignment_tool": "set_studio_scene_frame"}
     if url is not None:
-        data = downloader(url, min(HTTPS_MAX, get_settings().max_upload_mb * 1024 * 1024))
+        data = (downloader or download_https)(url, min(HTTPS_MAX, get_settings().max_upload_mb * 1024 * 1024))
     if len(data) == 0:
         raise ImportErrorImage("Imagen vacía.")
+    from PIL import Image
+    try:
+        with Image.open(io.BytesIO(data)) as image:
+            actual_mime = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp"}.get(image.format)
+    except (OSError, ValueError) as exc:
+        raise ImportErrorImage("El archivo no es una imagen válida.") from exc
+    if mime_type and actual_mime != mime_type.lower():
+        raise ImportErrorImage("El MIME declarado no coincide con los bytes.")
     with io.BytesIO(data) as stream:
         sha = hashlib.sha256(data).hexdigest()
         preexisting = session.scalar(select(Asset).where(Asset.sha256 == sha))
