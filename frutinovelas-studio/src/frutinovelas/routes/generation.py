@@ -215,7 +215,7 @@ def comfy_queue():
     try:
         return list_queue()
     except (ComfyError, httpx.HTTPError, ValueError) as exc:
-        raise HTTPException(422, "No se pudo comprobar la cola remota.") from exc
+        raise HTTPException(422, "No se pudo consultar la cola. Comprueba el diagnóstico de conexión.") from exc
 
 
 @router.post("/generations/{job_id}/stop")
@@ -226,3 +226,22 @@ def stop_generation(job_id: str):
         return stop_job(job_id)
     except (ComfyError, httpx.HTTPError, ValueError) as exc:
         raise HTTPException(409, str(exc) if isinstance(exc, ComfyError) else "No se pudo detener el trabajo remoto.") from exc
+
+@router.post("/generations/{job_id}/reconcile")
+def reconcile_ghost_generation(job_id: str, detach_old_runtime: bool = False):
+    """Explicitly reconcile a stale local record, never interrupt remote work."""
+    from frutinovelas.services.queue_control import reconcile_ghost
+    try:
+        return reconcile_ghost(job_id, detach_old_runtime=detach_old_runtime)
+    except (ComfyError, httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(409, str(exc) if isinstance(exc, ComfyError) else "No se pudo verificar el runtime.") from exc
+
+
+@router.post("/comfy/queue/pending/{prompt_id}/remove")
+def remove_pending_ghost(prompt_id: str):
+    """Delete one confirmed untracked remote pending prompt, never all or running."""
+    from frutinovelas.services.queue_control import remove_untracked_pending
+    try:
+        return remove_untracked_pending(prompt_id)
+    except (ComfyError, httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(409, str(exc) if isinstance(exc, ComfyError) else "No se pudo comprobar la cola.") from exc

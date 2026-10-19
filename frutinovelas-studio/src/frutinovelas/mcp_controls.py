@@ -269,9 +269,23 @@ def register_studio_controls(server, read, write, request):
         return request("POST", f"generations/{_id(job_id)}/abandon")
 
     @server.tool(annotations=read)
-    def get_comfy_queue() -> list[dict]:
-        """Consultar el estado local y remoto de trabajos propios, sin exponer prompts ajenos."""
+    def get_comfy_queue() -> dict:
+        """Consultar cola completa y trabajos locales actuales/históricos; sin exponer credenciales ni prompts."""
         return request("GET", "comfy/queue")
+
+    @server.tool(annotations=dangerous)
+    def reconcile_comfy_ghost(job_id: str, confirmed: bool = False,
+                               detach_old_runtime: bool = False) -> dict:
+        """Liberar registro fantasma comprobando cola e historial. Runtime antiguo requiere detach_old_runtime explícito."""
+        _confirm(confirmed)
+        suffix = "?detach_old_runtime=true" if detach_old_runtime else ""
+        return request("POST", f"generations/{_id(job_id)}/reconcile" + suffix)
+
+    @server.tool(annotations=dangerous)
+    def remove_untracked_comfy_pending(prompt_id: str, confirmed: bool = False) -> dict:
+        """Quitar un solo prompt remoto pendiente sin registro activo en Studio. NUNCA interrumpe trabajos en ejecución."""
+        _confirm(confirmed)
+        return request("POST", f"comfy/queue/pending/{_id(prompt_id)}/remove")
 
     @server.tool(annotations=dangerous)
     def stop_comfy_generation(job_id: str, confirmed: bool = False) -> dict:

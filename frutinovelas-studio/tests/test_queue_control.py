@@ -17,6 +17,10 @@ class QueueClient:
             return self.remote.identity
         if path == "/queue":
             return self.remote.queue
+        if path == "/system_stats":
+            return {"system": {"comfyui_version": "0.40.0"}}
+        if path.startswith("/history/"):
+            return {}
         raise AssertionError(path)
     def request(self, method, path, json=None):
         self.remote.calls.append((method, path, json))
@@ -105,6 +109,72 @@ def test_queue_read_never_exposes_other_prompts(client):
     with patch("frutinovelas.services.queue_control.ComfyClient", lambda *args: QueueClient(remote)):
         result = client.get("/api/v1/comfy/queue")
     assert result.status_code == 200, result.text
-    assert len(result.json()) == 1
-    assert result.json()[0]["id"] == id
-    assert "unrelated" not in result.text
+    assert result.json()["local_jobs"][0]["id"] == id
+    assert result.json()["pending"][0]["prompt_id"] == "unrelated"
+    assert result.json()["pending"][0]["ownership"] == "external"
+
+def test_queue_without_jobs_still_contacts_active_runtime(client):
+    id, remote = setup(client)
+    with session_factory()() as db:
+        job = db.get(GenerationJob, id)
+        job.state, job.active_scene_id = "cancelled", None
+        db.commit()
+    remote.queue = {"queue_running": [], "queue_pending": [[1, "external-pending", {}, {}]]}
+    from unittest.mock import patch
+    with patch("frutinovelas.services.queue_control.ComfyClient", lambda *args: QueueClient(remote)):
+        response = client.get("/api/v1/comfy/queue")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["server"]["available"] is True
+    assert body["local_jobs"] == []
+    assert body["pending"][0]["ownership"] == "external"
+
+
+def test_old_runtime_mismatch_is_diagnostic_not_global_failure(client):
+    id, remote = setup(client)
+    with session_factory()() as db:
+        job = db.get(GenerationJob, id)
+        job.snapshot = {**job.snapshot, "url": "https://old-pod.example"}
+        db.commit()
+    remote.queue = {"queue_running": [], "queue_pending": []}
+    from unittest.mock import patch
+    with patch("frutinovelas.services.queue_control.ComfyClient", lambda *args: QueueClient(remote)):
+        response = client.get("/api/v1/comfy/queue")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["historical_jobs"] == 1
+    assert data["local_jobs"][0]["runtime"] == "historical"
+    assert data["server"]["available"] is True
+
+
+def test_blocked_remote_queue_returns_diagnostic_not_422(client):
+    id, remote = setup(client)
+    class FailedQueue(QueueClient):
+        def get(self, path):
+            if path == "/queue":
+                raise ComfyError("HTTP unauthorized", 401)
+            return super().get(path)
+    from unittest.mock import patch
+    with patch("frutinovelas.services.queue_control.ComfyClient", lambda *args: FailedQueue(remote)):
+        response = client.get("/api/v1/comfy/queue")
+    assert response.status_code == 200
+    assert response.json()["server"]["code"] == "gateway_authorization"
+    assert response.json()["server"]["http_status"] == 401
+
+
+def test_ghost_reconciliation_refuses_live_queue_and_history(client):
+    id, remote = setup(client)
+    with session_factory()() as db:
+        job = db.get(GenerationJob, id)
+        from datetime import timedelta
+        from frutinovelas.models import utcnow
+        job.created_at = utcnow() - timedelta(minutes=2)
+        job.state = "unknown"
+        db.commit()
+    remote.queue = {"queue_running": [], "queue_pending": [[1, id, {}]]}
+    from unittest.mock import patch
+    with patch("frutinovelas.services.queue_control.ComfyClient", lambda *args: QueueClient(remote)):
+        response = client.post(f"/api/v1/generations/{id}/reconcile")
+    assert response.status_code == 409
+    with session_factory()() as db:
+        assert db.get(GenerationJob, id).state == "unknown"
