@@ -21,8 +21,9 @@ def queue_ids(snapshot: dict) -> tuple[list[str], list[str]]:
     return ids("queue_running"), ids("queue_pending")
 
 
-def list_queue(factory=None, client_factory=ComfyClient):
+def list_queue(factory=None, client_factory=None):
     factory = factory or session_factory()
+    client_factory = client_factory or ComfyClient
     with factory() as session:
         jobs = list(session.scalars(select(GenerationJob).where(GenerationJob.state.in_(ACTIVE))))
         # Use a connection frozen with a job, not an arbitrary default pod.
@@ -48,7 +49,7 @@ def list_queue(factory=None, client_factory=ComfyClient):
     return result
 
 
-def stop_job(job_id, factory=None, client_factory=ComfyClient):
+def stop_job(job_id, factory=None, client_factory=None):
     factory = factory or session_factory()
     with factory() as session:
         job = session.get(GenerationJob, job_id)
