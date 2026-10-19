@@ -1182,6 +1182,11 @@ def build(platform: str) -> dict:
     ]
     for i, c in enumerate(cells):
         c["id"] = f"fruti-{i:02d}"
+    # Insertar después del token sin renumerar ni modificar las celdas existentes.
+    queue_cell = code((ROOT / "scripts" / "colab_queue_cell.py").read_text(encoding="utf-8"))
+    queue_cell["id"] = "fruti-queue-controls"
+    token_index = next(i for i, c in enumerate(cells) if c["source"][0].startswith("# @title 9B"))
+    cells.insert(token_index + 1, queue_cell)
     return {"nbformat": 4, "nbformat_minor": 5, "metadata": p["metadata"], "cells": cells}
 
 
