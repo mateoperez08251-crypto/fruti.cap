@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 UI_FILE = ROOT / "workflows" / "H3_EQUILIBRADO_9x16_INICIO_FINAL.ui.json"
 EMBEDDED = [
+    ("src/frutinovelas/services/qwen21_workflow.py", ROOT / "src/frutinovelas/services/qwen21_workflow.py"),
     ("scripts/validate_workflows.py", ROOT / "scripts" / "validate_workflows.py"),
     ("scripts/export_workflow_api.py", ROOT / "scripts" / "export_workflow_api.py"),
     ("scripts/comfy_gateway.py", ROOT / "scripts" / "comfy_gateway.py"),
@@ -61,6 +62,10 @@ de forma segura para que **FRUTINOVELAS Studio** (que corre en tu PC) lo use com
    - `CF_TUNNEL_TOKEN` y `CF_TUNNEL_HOSTNAME`: solo si usas un túnel con nombre de Cloudflare (URL estable).
 3. Ejecuta las celdas **una a una, en orden**. Las celdas 10 y 11 tienen casillas desactivadas por defecto.
 
+**Qwen-Image-2.1 BF16 viene activado** para imágenes 1152×2048 con 40 pasos.
+Descarga 32,44 GB de pesos adicionales; usa su licencia Qwen Research.
+Conserva los perfiles Qwen anteriores como opciones de regreso. No cambia el canvas H3.
+
 **ACTIVAR_VOCES_PERSONAJES viene activado** para generar diálogo nuevo con una muestra guardada por personaje.
 Añade el checkpoint Ref2VA INT8 (20,97 GB) y reutiliza el encoder y los VAEs H3 del perfil seleccionado.
 La celda 4 muestra el espacio total antes de descargar. Puedes desactivar la opción si esta sesión no usará voces.
@@ -80,6 +85,7 @@ y entonces la IA consulta referencias en internet mediante las herramientas de s
 CONFIG_HEAD_COLAB = r'''# @title 1 · Configuración
 PERFIL_VIDEO = "h3_balanced_default"  # @param ["h3_balanced_default", "h3_quality_bf16_optional"]
 ACTIVAR_VOCES_PERSONAJES = True  # @param {type:"boolean"}
+ACTIVAR_QWEN_21_BF16 = True  # @param {type:"boolean"}
 ACTIVAR_QWEN_2512_T2I = False  # @param {type:"boolean"}
 QWEN_EDIT_2511 = "no"  # @param ["no", "fp8mixed", "bf16"]
 USAR_DRIVE = True  # @param {type:"boolean"}
@@ -121,7 +127,7 @@ PIP_MARKER = COMFY_DIR / ".frutinovelas_pip_ok"
 '''
 
 CONFIG_COMMON = r'''
-NOTEBOOK_VERSION = "1.2.0"
+NOTEBOOK_VERSION = "1.3.0"
 COMFY_REPO = "https://github.com/Comfy-Org/ComfyUI.git"
 COMFY_TAG = "v0.40.0"
 COMFY_COMMIT = "3541246a9c997f4b8c32f9f88f3c985d02021c79"
@@ -215,6 +221,8 @@ def cargar_kit():
 PERFILES_ACTIVOS = [PERFIL_VIDEO]
 if ACTIVAR_VOCES_PERSONAJES:
     PERFILES_ACTIVOS.append("h3_voice_references")
+if ACTIVAR_QWEN_21_BF16:
+    PERFILES_ACTIVOS.append("qwen21_bf16")
 if ACTIVAR_QWEN_2512_T2I:
     PERFILES_ACTIVOS.append("qwen2512_t2i")
 if QWEN_EDIT_2511 != "no":
@@ -629,6 +637,22 @@ for perfil, plantilla in TEMPLATES.items():
         print(f"✅ {destino.name} ({len(api_q)} nodos)")
     errores_totales += rq["errors"]
 
+if "qwen21_bf16" in PERFILES_ACTIVOS:
+    from frutinovelas.services.qwen21_workflow import WORKFLOWS, build_graph
+
+    api_q = build_graph()
+    rq = vw.validate_api_graph(api_q, OBJECT_INFO)
+    errores_totales += rq["errors"]
+    for error in rq["errors"]:
+        print("  [qwen21_bf16] ERROR:", error)
+    if not rq["errors"]:
+        for filename in WORKFLOWS:
+            destino = API_DIR / filename
+            destino.write_text(json.dumps(api_q, ensure_ascii=False, indent=2), encoding="utf-8")
+            INFORME["flujos"][filename] = {"perfil": "qwen21_bf16", "nodos": len(api_q),
+                "sha256": sha_json(destino), "cambios_perfil": [], "avisos": rq["warnings"]}
+            print(f"✅ {filename} (BF16, 1152×2048, 40 pasos)")
+
 (DATA_DIR / "informe_exportacion.json").write_text(json.dumps(INFORME, ensure_ascii=False, indent=2))
 if errores_totales:
     raise SystemExit(f"❌ {len(errores_totales)} error(es) de validación (detalle arriba). No se publican esos flujos.")
@@ -854,7 +878,7 @@ else:
 CELL_TESTS = r'''# @title 10 · Pruebas reales opcionales (usan GPU y tiempo)
 PROBAR_H3_SOLO_INICIO = False  # @param {type:"boolean"}
 PROBAR_H3_INICIO_FINAL = False  # @param {type:"boolean"}
-PROBAR_QWEN_2512 = False  # @param {type:"boolean"}
+PROBAR_QWEN = False  # @param {type:"boolean"}
 PROMPT_PRUEBA = "Una fresa sonriente camina por un mercado colorido al atardecer, cámara estable, luz cálida."  # @param {type:"string"}
 SEGUNDOS = 5  # @param {type:"slider", min:4, max:15, step:1}
 SEMILLA = 42  # @param {type:"integer"}
@@ -984,17 +1008,17 @@ if PROBAR_H3_SOLO_INICIO:
     prueba_h3("i2va")
 if PROBAR_H3_INICIO_FINAL:
     prueba_h3("fl2va")
-if PROBAR_QWEN_2512:
-    ruta_q = API_DIR / "QWEN_2512_T2I.api.json"
+if PROBAR_QWEN:
+    ruta_q = API_DIR / ("QWEN_21_T2I.api.json" if ACTIVAR_QWEN_21_BF16 else "QWEN_2512_T2I.api.json")
     if not ruta_q.exists():
-        raise SystemExit("Activa ACTIVAR_QWEN_2512_T2I en la celda 1 y repite las celdas 4–8.")
-    print("▶ Qwen-Image-2512 con los valores de la plantilla oficial")
+        raise SystemExit("Activa ACTIVAR_QWEN_21_BF16 en la celda 1 y repite las celdas 4–8.")
+    print("▶ Prueba", ruta_q.name)
     t0 = time.time()
     imgs = descargar_salidas(esperar(encolar(json.loads(ruta_q.read_text()))))
-    registrar("qwen2512_t2i", {"ok": bool(imgs), "tiempo_s": round(time.time() - t0)})
+    registrar("qwen21_bf16" if ACTIVAR_QWEN_21_BF16 else "qwen2512_t2i", {"ok": bool(imgs), "tiempo_s": round(time.time() - t0)})
     for p in imgs:
         display(IPImage(filename=str(p), width=320))
-if not (PROBAR_H3_SOLO_INICIO or PROBAR_H3_INICIO_FINAL or PROBAR_QWEN_2512):
+if not (PROBAR_H3_SOLO_INICIO or PROBAR_H3_INICIO_FINAL or PROBAR_QWEN):
     print("Ninguna prueba marcada. Recomendado: PROBAR_H3_SOLO_INICIO con 5 s.")
 '''
 

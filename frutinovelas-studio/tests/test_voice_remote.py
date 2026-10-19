@@ -74,7 +74,7 @@ def remote_export(tmp_path, monkeypatch):
     }.items():
         monkeypatch.setattr(remote, name, path)
     monkeypatch.setattr(remote, "ensure_dirs", lambda: None)
-    remote.save_json(remote.CONFIG_FILE, {**remote.DEFAULT_CFG, "voces_personajes": True})
+    remote.save_json(remote.CONFIG_FILE, {**remote.DEFAULT_CFG, "voces_personajes": True, "qwen21": False})
     graph, info = remote_export_inputs()
     monkeypatch.setattr(remote, "exportar", lambda *_args: copy.deepcopy(graph))
     return graph, info
@@ -94,7 +94,7 @@ def test_voice_cli_flag_is_persistent_and_only_adds_reference_weights(tmp_path, 
     assert remote.main(["models", "--voces-personajes", "si"]) == 0
     enabled = remote.cfg()
     assert enabled == {**original, "voces_personajes": True}
-    assert remote.perfiles_activos(enabled) == [profile, "h3_voice_references", "qwen2512_t2i", "qwen_edit2511_fp8mixed"]
+    assert remote.perfiles_activos(enabled) == [profile, "h3_voice_references", "qwen21_bf16", "qwen2512_t2i", "qwen_edit2511_fp8mixed"]
     components = remote.componentes(enabled)
     assert set(components) - set(baseline) == {VOICE_COMPONENT}
     assert set(baseline) <= set(components) and len(components) == len(set(components))

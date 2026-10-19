@@ -107,6 +107,10 @@ def validate_api_graph(graph: dict, object_info: dict | None = None) -> dict:
         required, optional = _input_specs(info)
         for name in required:
             if name not in inputs:
+                # Native Qwen 2.1 declares an Autogrow group with min=0.
+                # Text-to-image legitimately has no images.image_N inputs.
+                if ctype == "TextEncodeQwenImage21" and name == "images":
+                    continue
                 # Los inputs dinámicos (Autogrow/DynamicCombo) se serializan con
                 # claves con punto; si existe alguna con ese prefijo, se acepta.
                 if any(k.startswith(name + ".") for k in inputs):

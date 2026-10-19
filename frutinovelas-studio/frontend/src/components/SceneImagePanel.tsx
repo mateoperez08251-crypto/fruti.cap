@@ -36,7 +36,7 @@ export const SceneImagePanel = memo(function SceneImagePanel({ scene, dirty, onA
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['image-generations', scene.id] }); toast.ok('Imagen descartada de Studio') },
     onError: (e: Error) => toast.error(e.message) })
   return <section aria-label="Imágenes Qwen de esta escena" className="scene-images">
-    <p className="hint">{scene.parameters.cast?.length ? 'Qwen Edit recibirá las referencias de los personajes en el orden guardado.' : 'Sin personajes seleccionados se utiliza Qwen desde texto.'} Las referencias se conservan completas; la composición se prepara en 576×1024.</p>
+    <p className="hint">{scene.parameters.cast?.length ? 'Qwen recibirá las referencias de los personajes en el orden guardado.' : 'Sin personajes seleccionados se utiliza Qwen desde texto.'} El nuevo perfil Qwen 2.1 prepara imágenes de 1152×2048. Los servidores con perfiles anteriores conservan 576×1024. Para animar se prepara una copia al tamaño de H3.</p>
     <button className="btn btn-primary" id="btn-generate-image" disabled={dirty || !scene.parameters.image_prompt?.trim() || active || generate.isPending || jobs.isPending || jobs.isError} onClick={() => generate.mutate(false)}>{active ? 'Imagen en generación' : 'Generar imagen con Qwen'}</button>
     {scene.parameters.image_approval === 'automatic' && <button className="btn" disabled={dirty || !scene.parameters.image_prompt?.trim() || !scene.prompt.trim() || active || generate.isPending || jobs.isPending || jobs.isError} onClick={() => generate.mutate(true)}>Generar imagen y después animar</button>}
     {dirty && <p className="hint">Guarda la escena antes de generar o asignar una imagen.</p>}

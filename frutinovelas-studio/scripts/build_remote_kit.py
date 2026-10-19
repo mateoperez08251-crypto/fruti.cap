@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "dist" / "frutinovelas-kit.tar.gz"
 PREFIX = "frutinovelas-kit"
 FILES = {
+    "src/frutinovelas/services/qwen21_workflow.py": 0o644,
     "scripts/fruti_remote.py": 0o755,
     "scripts/validate_workflows.py": 0o644,
     "scripts/export_workflow_api.py": 0o644,

@@ -16,7 +16,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 H3Profile = Literal["h3_balanced_default", "h3_quality_bf16_optional"]
-ImageProfile = Literal["qwen2512_t2i", "qwen_edit2511_fp8mixed", "qwen_edit2511_bf16"]
+ImageProfile = Literal["qwen21_bf16", "qwen2512_t2i", "qwen_edit2511_fp8mixed", "qwen_edit2511_bf16"]
 Text = Annotated[str, Field(min_length=1, max_length=6000)]
 
 
@@ -125,7 +125,7 @@ class H3Draft(StrictModel):
 
 
 class ImageDraft(StrictModel):
-    profile: ImageProfile = "qwen2512_t2i"
+    profile: ImageProfile = "qwen21_bf16"
     mode: Literal["T2I", "EDIT"] = "T2I"
     has_reference_image: bool = False
     subject: Text
@@ -141,13 +141,13 @@ class ImageDraft(StrictModel):
 
     @model_validator(mode="after")
     def valid_mode(self):
-        editing = self.profile != "qwen2512_t2i"
+        editing = self.mode == "EDIT" if self.profile == "qwen21_bf16" else self.profile != "qwen2512_t2i"
         if editing != (self.mode == "EDIT"):
             raise ValueError("Qwen-Image-2512 usa T2I; Qwen-Image-Edit-2511 usa EDIT.")
         if editing and (not self.has_reference_image or not self.changes or not self.preserve):
             raise ValueError("EDIT requiere referencia, cambios concretos y atributos que conservar.")
         if not editing and (self.has_reference_image or self.changes or self.preserve):
-            raise ValueError("Para editar o preservar una referencia, selecciona Qwen-Image-Edit-2511.")
+            raise ValueError("Para editar o preservar una referencia, selecciona el modo EDIT de Qwen 2.1 o Qwen-Image-Edit-2511.")
         return self
 
 

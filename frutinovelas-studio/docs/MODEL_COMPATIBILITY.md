@@ -1,5 +1,11 @@
 # Compatibilidad comprobada en el código
 
+Actualización 18 de octubre: `qwen21_bf16` es el nuevo perfil de imágenes,
+con encoder y difusión BF16, 1152×2048 y 40 pasos. Se mantiene compatibilidad
+con los perfiles anteriores descritos abajo. Ver [Qwen 2.1](QWEN_21.md).
+Los límites 576×1024 y `EmptySD3LatentImage` de esta documentación se refieren
+a Qwen 2512/2511; Qwen 2.1 utiliza `EmptyLatentImage` y slots `images.image_N`.
+
 Revisión: 17 de octubre de 2026. Base del cambio de voces: `84af42e4da879cb19796822c5343c51dabe2580f`.
 El manifiesto declara archivos; no demuestra que estén cargados en un servidor activo.
 No se han descargado pesos ni ejecutado GPU en esta entrega.

@@ -37,7 +37,7 @@ import uuid
 from pathlib import Path
 
 # --------------------------------------------------------------------------- constantes
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 KIT_DIR = Path(__file__).resolve().parents[1]
 BASE = Path(os.environ.get("FRUTI_BASE", "/workspace"))
 COMFY_DIR = BASE / "ComfyUI"
@@ -178,6 +178,7 @@ def requests_mod():
 DEFAULT_CFG = {
     "perfil_video": "h3_balanced_default",
     "voces_personajes": False,
+    "qwen21": True,
     "qwen_t2i": False,
     "qwen_edit": "no",
     "acceso": "runpod_proxy" if os.environ.get("RUNPOD_POD_ID") else "quick",
@@ -195,6 +196,8 @@ def aplicar_flags(a: argparse.Namespace) -> dict:
         c["perfil_video"] = a.perfil
     if getattr(a, "voces_personajes", None):
         c["voces_personajes"] = a.voces_personajes == "si"
+    if getattr(a, "qwen21", None):
+        c["qwen21"] = a.qwen21 == "si"
     if getattr(a, "qwen_t2i", None):
         c["qwen_t2i"] = a.qwen_t2i == "si"
     if getattr(a, "qwen_edit", None):
@@ -294,6 +297,8 @@ def perfiles_activos(c: dict) -> list[str]:
     out = [c["perfil_video"]]
     if c.get("voces_personajes", False):
         out.append("h3_voice_references")
+    if c.get("qwen21", True):
+        out.append("qwen21_bf16")
     if c["qwen_t2i"]:
         out.append("qwen2512_t2i")
     if c["qwen_edit"] != "no":
@@ -569,6 +574,8 @@ def exportar_y_validar(object_info: dict, forzar: bool) -> dict:
     esperados = set(prof["workflow_api_files"].values()) | {
         NOMBRES_QWEN[p] for p in perfiles_activos(c) if p in NOMBRES_QWEN
     }
+    if c.get("qwen21", True):
+        esperados.update({"QWEN_21_T2I.api.json", "QWEN_21_EDIT.api.json"})
     if c.get("voces_personajes", False):
         esperados.add(VOICE_WORKFLOW)
     if not forzar and cache_exportacion_valida(previo, clave, esperados, object_info):
@@ -627,6 +634,23 @@ def exportar_y_validar(object_info: dict, forzar: bool) -> dict:
             }
             ok(f"{VOICE_WORKFLOW} ({len(voz)} nodos; muestras por personaje desde Studio)")
         errores_totales += rv["errors"]
+
+    if c.get("qwen21", True):
+        from frutinovelas.services.qwen21_workflow import WORKFLOWS, build_graph
+
+        api_q = build_graph()
+        rq = vw.validate_api_graph(api_q, object_info)
+        errores_totales += rq["errors"]
+        for error in rq["errors"]:
+            say(f"  [qwen21_bf16] ERROR: {error}")
+        if not rq["errors"]:
+            for filename in WORKFLOWS:
+                destino = API_DIR / filename
+                save_json(destino, api_q)
+                informe["flujos"][filename] = {"perfil": "qwen21_bf16", "nodos": len(api_q),
+                    "cambios_perfil": [], "avisos": rq["warnings"],
+                    "sha256": hashlib.sha256(destino.read_bytes()).hexdigest()}
+                ok(f"{filename} (BF16, 1152×2048, 40 pasos)")
 
     for perfil in perfiles_activos(c):
         plantilla = m["profiles"][perfil].get("template")
@@ -1041,13 +1065,13 @@ def cmd_test(a) -> None:
         (ok if good else warn)(f"Prueba {modo} terminada. Descarga el vídeo con: runpodctl send {videos[0]}")
 
     if a.qwen:
-        ruta = API_DIR / "QWEN_2512_T2I.api.json"
+        ruta = API_DIR / ("QWEN_21_T2I.api.json" if cfg().get("qwen21", True) else "QWEN_2512_T2I.api.json")
         if not ruta.exists():
             fail("Activa Qwen: fruti start --qwen-t2i si (antes: fruti models --qwen-t2i si)")
-        titulo("Prueba Qwen-Image-2512 (valores de la plantilla oficial)")
+        titulo(f"Prueba {ruta.name}")
         t0 = time.time()
         imgs = descargar(esperar(encolar(load_json(ruta))))
-        registrar_prueba("qwen2512_t2i", {"ok": bool(imgs), "tiempo_s": round(time.time() - t0)})
+        registrar_prueba("qwen21_bf16" if cfg().get("qwen21", True) else "qwen2512_t2i", {"ok": bool(imgs), "tiempo_s": round(time.time() - t0)})
         for p in imgs:
             ok(f"Imagen: {p}")
 
@@ -1058,6 +1082,7 @@ def main(argv: list[str] | None = None) -> int:
     opciones.add_argument("--perfil", choices=["h3_balanced_default", "h3_quality_bf16_optional"])
     opciones.add_argument("--voces-personajes", choices=["si", "no"],
                           help="añade H3 Ref2VA para generar diálogo con muestras de voz guardadas")
+    opciones.add_argument("--qwen21", choices=["si", "no"], help="Qwen 2.1 BF16 (predeterminado)")
     opciones.add_argument("--qwen-t2i", choices=["si", "no"])
     opciones.add_argument("--qwen-edit", choices=["no", "fp8mixed", "bf16"])
     opciones.add_argument("--acceso", choices=["runpod_proxy", "quick", "named", "ninguno"])
@@ -1081,7 +1106,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--segundos", type=int, default=5, choices=range(4, 16), metavar="4-15")
     s.add_argument("--prompt", default="Una fresa sonriente camina por un mercado colorido al atardecer, cámara estable, luz cálida.")
     s.add_argument("--semilla", type=int, default=42)
-    s.add_argument("--qwen", action="store_true", help="también prueba Qwen-Image-2512")
+    s.add_argument("--qwen", action="store_true", help="también prueba el perfil Qwen activo")
     s = sub.add_parser("logs", help="muestra logs")
     s.add_argument("servicio", choices=["comfyui", "gateway", "cloudflared"])
     s.add_argument("-n", type=int, default=80)
