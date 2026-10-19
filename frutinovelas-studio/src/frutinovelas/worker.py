@@ -278,6 +278,17 @@ class GenerationWorker:
                     return
                 job.prompt_id = pid
             history = client.get("/history/" + job.prompt_id).get(job.prompt_id)
+            with self.factory() as guard:
+                fresh = guard.get(GenerationJob, job.id)
+                stop_requested = bool(fresh and fresh.snapshot.get("stop_requested"))
+            if stop_requested:
+                queue = client.get("/queue")
+                from frutinovelas.services.queue_control import queue_ids
+                running, pending = queue_ids(queue)
+                if job.prompt_id not in running and job.prompt_id not in pending:
+                    transition(self.factory, job.id, "cancelled", "Interrupción confirmada: trabajo ausente de la cola remota.", expected_states=ACTIVE)
+                    return
+                return
             if not history:
                 queue = client.get("/queue")
                 running = {str(x[1]) for x in queue.get("queue_running", []) if len(x) > 1}

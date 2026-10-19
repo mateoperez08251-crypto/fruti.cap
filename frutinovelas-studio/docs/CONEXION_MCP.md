@@ -116,3 +116,33 @@ consola con Ctrl+C al terminar. No lo uses como servicio permanente.
 ## Importar imágenes creadas fuera de ComfyUI
 
 Tras actualizar Studio y reiniciar el MCP, los clientes pueden descubrir `import_studio_image`. Para usarla deben transferir bytes base64 o suministrar una URL HTTPS pública que la PC pueda descargar; importar no asigna ni genera. La referencia detallada está en [IMPORTAR_IMAGENES_MCP.md](IMPORTAR_IMAGENES_MCP.md). La URL de prueba pública sin autenticación permite escrituras desde cualquier cliente que la conozca, por lo que conviene cerrarla al terminar.
+
+
+## Administración de cola ComfyUI (MCP NARRAD)
+
+Tras actualizar Studio y reiniciar MCP, `get_comfy_queue()` consulta los
+trabajos propios, sus estados locales y si están pendientes o ejecutándose en
+ComfyUI. No publica prompts ni entradas de trabajos ajenos.
+
+`stop_comfy_generation(job_id, confirmed=true)` y el botón **Detener
+generación** de los paneles Qwen/H3 intentan cancelar *un solo trabajo*:
+- `queued`: cancela localmente antes de enviarlo.
+- `waiting` / `running`: verifica la identidad del runtime y su cola remota.
+  Si está pendiente, envía `POST /queue` con el ID exacto. Si está ejecutándose,
+  solicita `POST /interrupt` **solo si es el único trabajo en ejecución**.
+  Un interrupt es asíncrono; Studio conserva la reserva hasta confirmar que
+  desapareció de la cola y no puede iniciar otro trabajo prematuramente.
+- `uploading`, `submitting`, `downloading`, `unknown`: se rechaza la
+  cancelación destructiva porque la recepción/descarga podría ser ambigua.
+  Consultar primero la cola y el historial.
+
+La detención nunca borra los resultados previos, referencias ni versiones. Para
+una automatización de capítulo, la cancelación del trabajo activo provoca el
+fallo seguro de ese proceso en el siguiente avance; no se continuarán escenas.
+El gateway remoto debe admitir sus rutas nativas autenticadas `/queue` y
+`/interrupt`; si el runtime ya no coincide, no se cancela nada.
+
+**No se añade ninguna operación para vaciar indiscriminadamente toda la cola de
+ComfyUI**. El cliente debe especificar el ID real del trabajo y confirmar la
+acción. Los estados remotos se verifican en tiempo real; ComfyUI puede cambiar
+entre lecturas, de modo que ante un conflicto hay que volver a consultar.

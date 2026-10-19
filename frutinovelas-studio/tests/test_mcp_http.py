@@ -68,6 +68,8 @@ async def test_real_http_endpoint_tools_resources_and_dns_rebinding_protection()
                         "prepare_image_prompt",
                         "review_h3_prompt",
                         "create_studio_chapter_plan",
+                        "get_comfy_queue",
+                        "stop_comfy_generation",
                         "get_studio_status",
                         "get_comfy_connection",
                         "create_studio_project",

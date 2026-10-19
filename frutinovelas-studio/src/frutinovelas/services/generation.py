@@ -221,7 +221,7 @@ def _public_job(
 def transition(factory, job_id, state, error="", *, expected_states=ACTIVE, **extra):
     with factory() as session:
         values = dict(state=state, error=error, updated_at=utcnow(), **extra)
-        if state in ("completed", "failed"):
+        if state in ("completed", "failed", "cancelled"):
             values["active_scene_id"] = None
         result = session.execute(
             update(GenerationJob)

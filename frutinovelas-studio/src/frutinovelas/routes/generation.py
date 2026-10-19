@@ -206,3 +206,23 @@ def discard_generated_output(job_id: str, session: Session = Depends(get_session
     if filename and filename.is_file():
         filename.unlink()
     return {"discarded": True, "remote_copy": "deleted" if connection else "not_connected", "local_output_deleted": True}
+
+
+@router.get("/comfy/queue")
+def comfy_queue():
+    """Read only managed job IDs. Never exposes others' prompts or tokens."""
+    from frutinovelas.services.queue_control import list_queue
+    try:
+        return list_queue()
+    except (ComfyError, httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(422, "No se pudo comprobar la cola remota.") from exc
+
+
+@router.post("/generations/{job_id}/stop")
+def stop_generation(job_id: str):
+    """Stop one managed generation only, preserving history and other jobs."""
+    from frutinovelas.services.queue_control import stop_job
+    try:
+        return stop_job(job_id)
+    except (ComfyError, httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(409, str(exc) if isinstance(exc, ComfyError) else "No se pudo detener el trabajo remoto.") from exc

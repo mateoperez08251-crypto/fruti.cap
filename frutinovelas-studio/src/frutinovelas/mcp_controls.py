@@ -268,6 +268,17 @@ def register_studio_controls(server, read, write, request):
         _confirm(confirmed)
         return request("POST", f"generations/{_id(job_id)}/abandon")
 
+    @server.tool(annotations=read)
+    def get_comfy_queue() -> list[dict]:
+        """Consultar el estado local y remoto de trabajos propios, sin exponer prompts ajenos."""
+        return request("GET", "comfy/queue")
+
+    @server.tool(annotations=dangerous)
+    def stop_comfy_generation(job_id: str, confirmed: bool = False) -> dict:
+        """Detener solo esta generación. Requiere confirmación; no vacía cola ajena."""
+        _confirm(confirmed)
+        return request("POST", f"generations/{_id(job_id)}/stop")
+
     @server.tool(annotations=write)
     def request_chapter_images(chapter_id: str, request_id: str) -> dict:
         """GENERAR TODAS LAS IMÁGENES: encola las Qwen faltantes, sin iniciar video ni aprobar. USA GPU."""

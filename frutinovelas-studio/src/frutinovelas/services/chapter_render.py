@@ -204,13 +204,13 @@ def advance_runs(factory, stop_event, client_factory=ComfyClient):
                         chapter_render_id=id,
                     )
                     return
-                if image.state == "failed" or image.error and image.state == "completed":
+                if image.state in ("failed", "cancelled") or image.error and image.state == "completed":
                     raise ComfyError("Una imagen necesita revisión: " + (image.error or entry["title"]))
                 if image.state != "completed" or not image.snapshot.get("auto_finish_done"):
                     return
                 if video is None:
                     raise ComfyError("No se pudo continuar con la animación de «" + entry["title"] + "».")
-                if video.state == "failed":
+                if video.state in ("failed", "cancelled"):
                     raise ComfyError("Falló la animación de «" + entry["title"] + "»: " + video.error)
                 if video.state != "completed":
                     return
