@@ -40,6 +40,19 @@ jobs:
           sudo apt-get install -y ffmpeg
       - name: Test API, workers, MCP and updater without GPU
         run: uv run --frozen pytest -q
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frutinovelas-studio
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frutinovelas-studio/frontend/package-lock.json
       - name: Install frontend dependencies
         run: npm --prefix frontend ci
       - name: Test frontend behavior
