@@ -30,7 +30,6 @@ export function NarratedPage() {
   useEffect(() => {
     if (!projectId) return
     void api.narratedVideos(projectId).then(setVideos).catch(() => setError('No se pudieron cargar los videos.'))
-    setCurrent(null); setDraft(null)
   }, [projectId])
   useEffect(() => {
     if (!current || !['queued', 'rendering'].includes(current.state)) return
@@ -112,7 +111,7 @@ export function NarratedPage() {
       <h3><Music2 size={17}/> 1. Audio de la historia</h3>
       <p className="hint">Sube WAV, MP3, M4A o audio compatible. Este modo usa la narración como pista principal; no modifica las voces.</p>
       <div className="narration-fields">
-        <label>Proyecto<select value={projectId} onChange={e => setProjectId(e.target.value)}>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+        <label>Proyecto<select value={projectId} onChange={e => { setProjectId(e.target.value); setCurrent(null); setDraft(null) }}>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
         <label>Título<input value={newTitle} onChange={e=>setNewTitle(e.target.value)}/></label>
         <label>Formato<select value={ratio} onChange={e=>setRatio(e.target.value as '9:16'|'16:9')}><option value="9:16">Vertical 9:16</option><option value="16:9">Horizontal 16:9</option></select></label>
         <label>Audio completo<input type="file" accept="audio/*,.mp3,.wav,.m4a,.flac,.ogg,.webm" onChange={e=>setFile(e.target.files?.[0] || null)}/></label>

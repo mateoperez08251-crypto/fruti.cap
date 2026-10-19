@@ -19,7 +19,7 @@ export type NarratedVideo = {
   aspect_ratio: '9:16' | '16:9'
   shots: NarratedShot[]
   revision: number
-  state: 'draft' | 'queued' | 'rendering' | 'completed' | 'failed' | 'cancelled'
+  state: 'draft' | 'queued' | 'rendering' | 'completed' | 'failed'
   progress: number
   error: string
   result_url: string | null
@@ -172,7 +172,7 @@ export type ComfyConnection = {
 export type Generation = {
   id: string
   scene_id: string
-  state: 'queued' | 'uploading' | 'submitting' | 'waiting' | 'running' | 'downloading' | 'unknown' | 'completed' | 'failed'
+  state: 'queued' | 'uploading' | 'submitting' | 'waiting' | 'running' | 'downloading' | 'unknown' | 'completed' | 'failed' | 'cancelled'
   error: string
   revision_number: number
   duration_seconds: number

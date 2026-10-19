@@ -46,7 +46,7 @@ export const SceneImagePanel = memo(function SceneImagePanel({ scene, dirty, onA
     {dirty && <p className="hint">Guarda la escena antes de generar o asignar una imagen.</p>}
     {jobs.isError && <p role="alert">No se pudieron consultar las imágenes. <button className="btn btn-sm" onClick={() => jobs.refetch()}>Reintentar</button></p>}
     <div className="character-grid">{jobs.data?.slice(0, count).map((j) => <article key={j.id} className="image-result">
-      <p>{j.state === 'completed' ? (j.approval_mode === 'automatic' && j.auto_finish_done ? 'Imagen procesada automáticamente' : 'Imagen lista para revisar') : j.state === 'failed' ? 'Generación fallida' : 'En cola o generando'} · r{j.revision_number}</p>
+      <p>{j.state === 'completed' ? (j.approval_mode === 'automatic' && j.auto_finish_done ? 'Imagen procesada automáticamente' : 'Imagen lista para revisar') : j.state === 'failed' ? 'Generación fallida' : j.state === 'cancelled' ? 'Generación detenida' : 'En cola o generando'} · r{j.revision_number}</p>
       {j.error && <p role="alert">{j.error}</p>}
       <p className="hint">{j.references.map((r, i) => `${i + 1}: ${r.name}`).join(' · ')}</p>
       {j.result_asset_id && <><a href={j.result_url!} target="_blank" rel="noreferrer"><img src={thumbUrl(j.result_asset_id, 512)} alt="Resultado Qwen para revisar" loading="lazy" /></a>
