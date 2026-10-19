@@ -70,6 +70,8 @@ async def test_real_http_endpoint_tools_resources_and_dns_rebinding_protection()
                         "create_studio_chapter_plan",
                         "get_comfy_queue",
                         "stop_comfy_generation",
+                        "reconcile_comfy_ghost",
+                        "remove_untracked_comfy_pending",
                         "get_studio_status",
                         "get_comfy_connection",
                         "create_studio_project",
