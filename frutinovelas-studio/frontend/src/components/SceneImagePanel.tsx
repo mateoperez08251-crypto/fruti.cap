@@ -50,7 +50,7 @@ export const SceneImagePanel = memo(function SceneImagePanel({ scene, dirty, onA
         <button className="btn btn-sm" disabled={dirty || approve.isPending || !scene.start_asset} onClick={() => approve.mutate({ id: j.id, role: 'end' })}>Aprobar y usar de final</button>
         <button className="btn btn-sm" disabled={discard.isPending} onClick={() => {
           if (window.confirm('Eliminar esta imagen generada? Las imagenes usadas como referencia se conservan.')) discard.mutate(j.id)
-        }}><Trash2 size={14}/> Descartar imagen</button></>
+        }}><Trash2 size={14}/> Descartar imagen</button></>}
       {(j.state === 'queued' || j.state === 'unknown') && <button className="btn btn-sm" disabled={abandon.isPending} onClick={() => { if (window.confirm('Comprueba primero la cola remota. Cerrar este registro no detiene una generación ya enviada. ¿Cerrar?')) abandon.mutate(j.id) }}>Cerrar registro</button>}
     </article>)}</div>
     {jobs.data && jobs.data.length > count && <button className="btn btn-sm" onClick={() => setCount(count + 5)}>Ver imágenes anteriores</button>}
