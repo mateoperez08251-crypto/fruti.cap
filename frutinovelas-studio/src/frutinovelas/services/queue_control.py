@@ -51,6 +51,7 @@ def list_queue(factory=None, client_factory=None):
 
 def stop_job(job_id, factory=None, client_factory=None):
     factory = factory or session_factory()
+    client_factory = client_factory or ComfyClient
     with factory() as session:
         job = session.get(GenerationJob, job_id)
         if not job:
