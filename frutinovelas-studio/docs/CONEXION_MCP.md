@@ -146,3 +146,39 @@ El gateway remoto debe admitir sus rutas nativas autenticadas `/queue` y
 ComfyUI**. El cliente debe especificar el ID real del trabajo y confirmar la
 acción. Los estados remotos se verifican en tiempo real; ComfyUI puede cambiar
 entre lecturas, de modo que ante un conflicto hay que volver a consultar.
+
+
+## Diagnóstico de cola fantasma y error get_comfy_queue
+
+`get_comfy_queue()` devuelve un objeto con `server`, `running`, `pending`,
+`local_jobs`, `historical_jobs`, `warnings` y `status`. El MCP consulta
+siempre **la conexión ComfyUI actual** guardada en Studio; los snapshots de
+trabajos vinculados a pods anteriores se clasifican como históricos y no
+interrumpen la lectura. La consulta también funciona si no hay trabajos locales.
+Los prompts remotos desconocidos se muestran con `ownership="external"`,
+sin incluir grafos, cabeceras ni credenciales.
+
+`server.code` ayuda a distinguir `gateway_authorization` (401/403),
+`queue_route_missing` (404), `gateway_timeout`,
+`gateway_network_error`, `gateway_upstream_error`,
+`unexpected_redirect` y `invalid_queue_response`. Un
+`get_studio_status` saludable solo confirma `/system_stats`, no
+`/queue`, y no prueba la conexión de cada runtime histórico.
+
+Para liberar exclusivamente un registro local que ComfyUI no encuentra,
+`reconcile_comfy_ghost(job_id, confirmed=true)` valida la identidad del
+servidor y realiza dos lecturas de `/queue` más una de
+`/history/{prompt_id}`. Solo entonces cierra el registro sin solicitar
+interrupción GPU. Si pertenece a otro runtime que ya no se puede comprobar,
+es necesario además `detach_old_runtime=true`; **esto solo desvincula
+Studio, no detiene ni verifica la inferencia antigua**.
+
+Para un prompt realmente pendiente pero sin registro local activo,
+`remove_untracked_comfy_pending(prompt_id, confirmed=true)` elimina
+únicamente ese ID de la cola actual y confirma que ya no aparece.
+No actúa sobre prompts ejecutándose y no admite limpiar toda la cola.
+No utilizar la herramienta sobre un trabajo ajeno sin permiso.
+
+Los cambios del código requieren `actualizar.cmd`, `iniciar.cmd`,
+reiniciar MCP NARRAR y refrescar las herramientas del conector. No requieren
+cambiar la URL, token o gateway si los existentes siguen funcionando.
