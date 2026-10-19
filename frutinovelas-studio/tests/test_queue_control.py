@@ -17,6 +17,10 @@ class QueueClient:
             return self.remote.identity
         if path == "/queue":
             return self.remote.queue
+        if path == "/system_stats":
+            return {"system": {"comfyui_version": "0.40.0"}}
+        if path.startswith("/history/"):
+            return {}
         raise AssertionError(path)
     def request(self, method, path, json=None):
         self.remote.calls.append((method, path, json))
