@@ -5,11 +5,11 @@ import { Link } from 'react-router-dom'
 import { api, ApiError, type Generation, type Scene } from '../api'
 import { useToast } from './Toast'
 
-const terminal = new Set(['completed', 'failed'])
+const terminal = new Set(['completed', 'failed', 'cancelled'])
 const labels: Record<Generation['state'], string> = {
   queued: 'En cola local', uploading: 'Preparando y subiendo referencias', submitting: 'Enviando a ComfyUI',
   waiting: 'En cola de ComfyUI', running: 'Generando en la GPU', downloading: 'Descargando video',
-  unknown: 'Comprobando recepción', completed: 'Video disponible', failed: 'Interrumpido o fallido',
+  unknown: 'Comprobando recepción', completed: 'Video disponible', failed: 'Interrumpido o fallido', cancelled: 'Detenido manualmente',
 }
 
 export const GenerationPanel = memo(function GenerationPanel({ scene, dirty }: { scene: Scene; dirty: boolean }) {
@@ -40,6 +40,10 @@ export const GenerationPanel = memo(function GenerationPanel({ scene, dirty }: {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['generations', scene.id] }),
     onError: (error: ApiError) => toast.error(error.message),
   })
+  const stop = useMutation({ mutationFn: api.stopGeneration,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['generations', scene.id] }); toast.ok('Solicitud de detener enviada') },
+    onError: (error: ApiError) => toast.error(error.message),
+  })
   const discard = useMutation({
     mutationFn: api.discardGenerationOutput,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['generations', scene.id] }); toast.ok('Archivo descartado del almacenamiento de Studio') },
@@ -66,6 +70,9 @@ export const GenerationPanel = memo(function GenerationPanel({ scene, dirty }: {
       {(job.state === 'unknown' || job.state === 'queued') && <button className="btn btn-ghost btn-sm" disabled={abandon.isPending} onClick={() => {
         if (window.confirm('Comprueba primero la cola de RunPod. Cerrar este registro no detiene una inferencia remota. ¿Ya comprobaste que puedes cerrar el trabajo?')) abandon.mutate(job.id)
       }}>{job.state === 'queued' ? 'Cancelar envío pendiente' : 'Marcar como interrumpida'}</button>}
+      {(job.state === 'queued' || job.state === 'waiting' || job.state === 'running') && <button className="btn btn-ghost btn-sm" disabled={stop.isPending} onClick={() => {
+        if (window.confirm('¿Detener esta generación? Solo se actuará sobre su trabajo; no se vaciará la cola completa.')) stop.mutate(job.id)
+      }}>Detener generación</button>}
       {job.result_url && <><video className="generation-video" src={job.result_url} controls preload="none" />
         <a className="btn btn-sm" href={job.result_url + '?download=true'}><Download size={14} /> Descargar video</a>
         <button className="btn btn-ghost btn-sm" disabled={discard.isPending} onClick={() => {

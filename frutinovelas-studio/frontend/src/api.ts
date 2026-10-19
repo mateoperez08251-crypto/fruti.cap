@@ -19,7 +19,7 @@ export type NarratedVideo = {
   aspect_ratio: '9:16' | '16:9'
   shots: NarratedShot[]
   revision: number
-  state: 'draft' | 'queued' | 'rendering' | 'completed' | 'failed'
+  state: 'draft' | 'queued' | 'rendering' | 'completed' | 'failed' | 'cancelled'
   progress: number
   error: string
   result_url: string | null
@@ -225,6 +225,8 @@ const json = (method: string, data: unknown): RequestInit => ({
 
 export const api = {
   deleteNarratedOutput: (id: string) => request<NarratedVideo>('/narrated-videos/' + id + '/output', { method: 'DELETE' }),
+  stopGeneration: (id: string) => request<{ id: string; state: string }>('/generations/' + id + '/stop', { method: 'POST' }),
+  comfyQueue: () => request<{ id: string; scene_id: string; kind: string; state: string; remote_state: string }[]>('/comfy/queue'),
   discardGenerationOutput: (id: string) => request<{discarded: boolean; remote_copy: string}>('/generations/' + id + '/output', { method: 'DELETE' }),
   narratedVideos: (projectId: string) => request<NarratedVideo[]>('/projects/' + projectId + '/narrated-videos'),
   narratedVideo: (id: string) => request<NarratedVideo>('/narrated-videos/' + id),

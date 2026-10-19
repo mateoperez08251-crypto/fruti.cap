@@ -4,7 +4,7 @@ import { memo, useEffect, useRef, useState } from 'react'
 import { api, thumbUrl, type Scene } from '../api'
 import { useToast } from './Toast'
 
-const terminal = new Set(['completed', 'failed'])
+const terminal = new Set(['completed', 'failed', 'cancelled'])
 export const SceneImagePanel = memo(function SceneImagePanel({ scene, dirty, onApplied }: { scene: Scene; dirty: boolean; onApplied: (scene: Scene) => void }) {
   const qc = useQueryClient()
   const toast = useToast()
@@ -32,6 +32,10 @@ export const SceneImagePanel = memo(function SceneImagePanel({ scene, dirty, onA
     onError: (e) => toast.error(e.message) })
   const abandon = useMutation({ mutationFn: api.abandonGeneration,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['image-generations', scene.id] }), onError: (e) => toast.error(e.message) })
+  const stop = useMutation({ mutationFn: api.stopGeneration,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['image-generations', scene.id] }); toast.ok('Solicitud de detener enviada') },
+    onError: (e: Error) => toast.error(e.message),
+  })
   const discard = useMutation({ mutationFn: api.discardGenerationOutput,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['image-generations', scene.id] }); toast.ok('Imagen descartada de Studio') },
     onError: (e: Error) => toast.error(e.message) })
@@ -51,6 +55,9 @@ export const SceneImagePanel = memo(function SceneImagePanel({ scene, dirty, onA
         <button className="btn btn-sm" disabled={discard.isPending} onClick={() => {
           if (window.confirm('Eliminar esta imagen generada? Las imagenes usadas como referencia se conservan.')) discard.mutate(j.id)
         }}><Trash2 size={14}/> Descartar imagen</button></>}
+      {(j.state === 'queued' || j.state === 'waiting' || j.state === 'running') && <button className="btn btn-sm" disabled={stop.isPending} onClick={() => {
+        if (window.confirm('¿Detener esta generación Qwen? Solo se cancelará este trabajo.')) stop.mutate(j.id)
+      }}>Detener generación</button>}
       {(j.state === 'queued' || j.state === 'unknown') && <button className="btn btn-sm" disabled={abandon.isPending} onClick={() => { if (window.confirm('Comprueba primero la cola remota. Cerrar este registro no detiene una generación ya enviada. ¿Cerrar?')) abandon.mutate(j.id) }}>Cerrar registro</button>}
     </article>)}</div>
     {jobs.data && jobs.data.length > count && <button className="btn btn-sm" onClick={() => setCount(count + 5)}>Ver imágenes anteriores</button>}
