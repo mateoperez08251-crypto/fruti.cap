@@ -266,3 +266,12 @@ def remove_pending_ghost(prompt_id: str):
         return remove_untracked_pending(prompt_id)
     except (ComfyError, httpx.HTTPError, ValueError) as exc:
         raise HTTPException(409, str(exc) if isinstance(exc, ComfyError) else "No se pudo comprobar la cola.") from exc
+
+
+@router.post("/comfy/queue/stop-all")
+def stop_all_generations():
+    from frutinovelas.services.queue_control import stop_all_jobs
+    try:
+        return stop_all_jobs(client_factory=ComfyClient)
+    except ComfyError as exc:
+        raise HTTPException(409, str(exc)) from exc

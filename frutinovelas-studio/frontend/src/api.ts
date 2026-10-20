@@ -226,6 +226,7 @@ const json = (method: string, data: unknown): RequestInit => ({
 export const api = {
   deleteNarratedOutput: (id: string) => request<NarratedVideo>('/narrated-videos/' + id + '/output', { method: 'DELETE' }),
   stopGeneration: (id: string) => request<{ id: string; state: string }>('/generations/' + id + '/stop', { method: 'POST' }),
+  stopAllGenerations: () => request<{ cancelled: string[]; pending: string[]; stopped_chapters: string[] }>('/comfy/queue/stop-all', { method: 'POST' }),
   recoverQueue: () => request<{ status: string; recovered: string[] }>('/comfy/queue/recover', { method: 'POST' }),
   stopChapterRender: (id: string) => request<{ stopped: boolean; pending_jobs: string[] }>('/chapter-renders/' + id + '/stop', { method: 'POST' }),
   comfyQueue: () => request<{ status: string; server: { available: boolean; code: string; message: string }; running: unknown[]; pending: unknown[]; local_jobs: unknown[] }>('/comfy/queue'),

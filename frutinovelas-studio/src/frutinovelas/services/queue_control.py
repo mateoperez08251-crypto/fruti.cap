@@ -506,3 +506,38 @@ def remove_untracked_pending(prompt_id, *, factory=None, client_factory=None):
     finally:
         client.close()
     return {"prompt_id": prompt_id, "removed": True, "remote_action": "delete_one_pending"}
+
+
+def stop_all_jobs(factory=None, client_factory=None):
+    """Cancel a snapshot of Studio work, preserving data and unrelated remote jobs."""
+    from frutinovelas.config import get_settings
+    from frutinovelas.models import ChapterRender
+    from frutinovelas.services.queue_recovery import recover_locked
+    from frutinovelas.worker import WorkerLock
+
+    factory = factory or session_factory()
+    client_factory = client_factory or ComfyClient
+    lock = WorkerLock(get_settings().resolved_data_dir / "generation_worker.lock")
+    if not lock.acquire():
+        raise ComfyError("El worker está procesando un trabajo. Reintenta en unos segundos.")
+    try:
+        with factory() as session:
+            ids = list(session.scalars(select(GenerationJob.id).where(GenerationJob.state.in_(ACTIVE))))
+            runs = list(session.scalars(select(ChapterRender).where(ChapterRender.active_chapter_id.is_not(None))))
+            run_ids = [run.id for run in runs]
+            for run in runs:
+                run.state, run.active_chapter_id = "failed", None
+                run.error = "Proceso detenido por el usuario. Se conservan los prompts y resultados."
+            session.commit()
+        # Release verified ghosts first; never interpret an unavailable server as empty.
+        recover_locked(factory, client_factory)
+        stopped, pending = [], []
+        for job_id in ids:
+            try:
+                result = stop_job(job_id, factory=factory, client_factory=client_factory)
+                (stopped if result["state"] == "cancelled" else pending).append(job_id)
+            except (ComfyError, httpx.HTTPError, ValueError):
+                pending.append(job_id)
+        return {"cancelled": stopped, "pending": pending, "stopped_chapters": run_ids}
+    finally:
+        lock.release()
