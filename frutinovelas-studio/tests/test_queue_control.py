@@ -81,9 +81,11 @@ def test_targeted_pending_cancel_and_other_pending_preserved(client):
 
 def test_running_interrupt_requires_only_one_job(client):
     id, remote = setup(client)
+    remote.identity = {**remote.identity, "comfyui_commit": "3541246a9c997f4b8c32f9f88f3c985d02021c79"}
     with session_factory()() as db:
         job = db.get(GenerationJob, id)
         job.state = "running"
+        job.snapshot = {**job.snapshot, "identity": remote.identity}
         db.commit()
     remote.queue = {"queue_running": [[1, "foreign"], [2, id]], "queue_pending": []}
     remote.calls = []
@@ -97,7 +99,7 @@ def test_running_interrupt_requires_only_one_job(client):
         ok = client.post(f"/api/v1/generations/{id}/stop")
     assert ok.status_code == 200, ok.text
     assert ok.json()["state"] == "stopping"
-    assert remote.calls == [("POST", "/interrupt", {})]
+    assert remote.calls == [("POST", "/interrupt", {"prompt_id": id})]
     with session_factory()() as db:
         assert db.get(GenerationJob, id).snapshot["stop_requested"]
 
@@ -169,6 +171,7 @@ def test_ghost_reconciliation_refuses_live_queue_and_history(client):
         from datetime import timedelta
         from frutinovelas.models import utcnow
         job.created_at = utcnow() - timedelta(minutes=2)
+        job.updated_at = job.created_at
         job.state = "unknown"
         db.commit()
     remote.queue = {"queue_running": [], "queue_pending": [[1, id, {}]]}

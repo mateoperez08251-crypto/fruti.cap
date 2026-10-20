@@ -168,6 +168,39 @@ const job = (id: string, state: Generation['state']): Generation => ({
 })
 const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms) })
 
+test('recovering a stale queue refreshes jobs and keeps unsaved prompts', async () => {
+  let recovered = false
+  const recoverQueue = vi.fn<typeof api.recoverQueue>(async () => {
+    recovered = true
+    return { status: 'ok', recovered: ['old-job'] }
+  })
+  const generate = vi.fn<typeof api.generateScene>()
+  setup({ recoverQueue, generateScene: generate, generations: async () => [job('old-job', recovered ? 'cancelled' : 'unknown')] })
+  await screen.findByDisplayValue('Original uno')
+  edit('scene-prompt', 'Mi diálogo sin guardar: «¡Niños a salvo!»')
+  fireEvent.click(screen.getByRole('button', { name: 'Recuperar cola' }))
+  await screen.findByRole('button', { name: 'Reintentar escena guardada' })
+  expect(recoverQueue).toHaveBeenCalledOnce()
+  expect(control('scene-prompt').value).toBe('Mi diálogo sin guardar: «¡Niños a salvo!»')
+  expect(control('btn-generate-scene').disabled).toBe(true)
+  expect(generate).not.toHaveBeenCalled()
+})
+
+test('cancelled automatic images can retry saved prompts without deleting assets', async () => {
+  const image: ImageGeneration = { id: 'old-image', scene_id: 's1', kind: 'image', state: 'cancelled',
+    error: '', revision_number: 1, seed: 1, references: [], result_asset_id: null, result_url: null,
+    created_at: '2026-01-01', auto_finish_done: false }
+  const generate = vi.fn<typeof api.generateSceneImage>(async () => ({ ...image, id: 'new-image', state: 'queued' }))
+  setup({ scenes: async () => originals.map((s) => ({ ...s, parameters: { image_prompt: 'Imagen literal ñ' } })),
+    imageGenerations: async () => [image], generateSceneImage: generate })
+  await screen.findByDisplayValue('Original uno')
+  await openImagePreparation()
+  fireEvent.click(await screen.findByRole('button', { name: 'Reintentar imagen guardada' }))
+  await waitFor(() => expect(generate).toHaveBeenCalledOnce())
+  expect(generate.mock.calls[0]).toEqual(['s1', 1, expect.any(String), false])
+  expect(generate.mock.calls[0][2]).not.toBe('old-image')
+})
+
 test('idle polling stays slow, pauses while hidden and does not start generations', async () => {
   vi.useFakeTimers()
   focusManager.setFocused(true)

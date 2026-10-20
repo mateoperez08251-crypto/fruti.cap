@@ -193,6 +193,9 @@ def test_active_listener_blocks_update(tmp_path, monkeypatch):
         listener.listen()
         port = listener.getsockname()[1]
         monkeypatch.setenv("FRUTINOVELAS_API_PORT", str(port))
+        # A developer may have Studio running on a default port. Exercise this
+        # listener only; configured_ports is covered independently below.
+        monkeypatch.setattr(updater, "configured_ports", lambda app: {port})
         with pytest.raises(updater.UpdateError, match=f"puerto local {port}"):
             updater.check_stopped(tmp_path)
 

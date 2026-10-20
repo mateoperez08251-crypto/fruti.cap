@@ -168,8 +168,10 @@ def _history_state(client, prompt_id):
     if not _valid_prompt_id(prompt_id):
         return "unverified"
     history = client.get("/history/" + prompt_id)
+    if not isinstance(history, dict):
+        raise ComfyError("El historial remoto no es un objeto JSON válido.")
     record = history.get(prompt_id)
-    if not record:
+    if prompt_id not in history:
         return "not_found"
     if not isinstance(record, dict):
         return "unknown"
@@ -327,9 +329,12 @@ def stop_job(job_id, factory=None, client_factory=None):
         state, prompt_id = job.state, job.prompt_id
         snapshot = job.snapshot or {}
         url, encrypted, identity = snapshot.get("url"), job.encrypted_token, snapshot.get("identity") or {}
-    if state == "queued":
+        current = _current_connection(session)
+        if current and current.url == url and identity_key(current.identity or {}) == identity_key(identity):
+            encrypted = current.encrypted_token
+    if state in ("queued", "uploading"):
         if not transition(factory, job_id, "cancelled", "Detenida antes de enviarse a ComfyUI.",
-                          expected_states=("queued",)):
+                          expected_states=(state,)):
             raise ComfyError("La generación cambió; vuelve a consultar la cola.")
         return {"id": job_id, "state": "cancelled", "remote_action": "none"}
     if state not in ("waiting", "running"):
@@ -338,7 +343,8 @@ def stop_job(job_id, factory=None, client_factory=None):
         raise ComfyError("Falta la conexión congelada de esta generación.")
     client = client_factory(url, _token(encrypted))
     try:
-        if identity_key(client.get("/frutinovelas/identity")) != identity_key(identity):
+        live_identity = client.get("/frutinovelas/identity")
+        if identity_key(live_identity) != identity_key(identity):
             raise ComfyError("La identidad remota cambió; no se interrumpirá otra sesión.")
         first, _ = _queue_entries(client.get("/queue"), strict=True)
         running = [e["prompt_id"] for e in first["running"]]
@@ -348,14 +354,18 @@ def stop_job(job_id, factory=None, client_factory=None):
             second, _ = _queue_entries(client.get("/queue"), strict=True)
             if prompt_id in {e["prompt_id"] for group in second.values() for e in group}:
                 raise ComfyError("El trabajo aún aparece en ComfyUI. No se ha marcado como cancelado.")
+            if _history_state(client, prompt_id) != "not_found":
+                return {"id": job_id, "state": state, "remote_action": "recover_history"}
             action = "removed_pending"
         elif prompt_id in running:
+            if live_identity.get("comfyui_commit") != "3541246a9c997f4b8c32f9f88f3c985d02021c79":
+                raise ComfyError("Este servidor no confirma interrupción por ID. No se enviará una interrupción global.")
             if running != [prompt_id]:
                 raise ComfyError("No se puede interrumpir: ComfyUI también ejecuta otros trabajos.")
             again, _ = _queue_entries(client.get("/queue"), strict=True)
             if [e["prompt_id"] for e in again["running"]] != [prompt_id]:
                 raise ComfyError("Cambió la ejecución; vuelve a consultar la cola.")
-            client.request("POST", "/interrupt", json={})
+            client.request("POST", "/interrupt", json={"prompt_id": prompt_id})
             action = "interrupt_requested"
         else:
             raise ComfyError("No figura en la cola. Usa la reconciliación de trabajos fantasma.")
@@ -384,6 +394,20 @@ def _age_seconds(value):
 
 def reconcile_ghost(job_id, *, detach_old_runtime=False, factory=None, client_factory=None):
     """Manually release a proven missing remote job; old-runtime detach is explicit."""
+    from frutinovelas.config import get_settings
+    from frutinovelas.worker import WorkerLock
+
+    lock = WorkerLock(get_settings().resolved_data_dir / "generation_worker.lock")
+    if not lock.acquire():
+        raise ComfyError("El worker está procesando un trabajo; reintenta en unos segundos.")
+    try:
+        return _reconcile_ghost_locked(job_id, detach_old_runtime=detach_old_runtime,
+                                       factory=factory, client_factory=client_factory)
+    finally:
+        lock.release()
+
+
+def _reconcile_ghost_locked(job_id, *, detach_old_runtime=False, factory=None, client_factory=None):
     factory = factory or session_factory()
     client_factory = client_factory or ComfyClient
     with factory() as session:
@@ -395,7 +419,7 @@ def reconcile_ghost(job_id, *, detach_old_runtime=False, factory=None, client_fa
             return {"id": job.id, "state": "cancelled", "already_resolved": True}
         if job.state not in ACTIVE:
             raise ComfyError("El trabajo ya terminó.")
-        if _age_seconds(job.created_at) < GHOST_MIN_AGE_SECONDS:
+        if _age_seconds(job.updated_at) < GHOST_MIN_AGE_SECONDS:
             raise ComfyError("Espera al menos 30 segundos antes de reconciliar una generación.")
         state, prompt_id, snap = job.state, job.prompt_id, dict(job.snapshot or {})
         historical = bool(current) and (
@@ -406,7 +430,7 @@ def reconcile_ghost(job_id, *, detach_old_runtime=False, factory=None, client_fa
             if not detach_old_runtime:
                 raise ComfyError("El trabajo pertenece a un runtime anterior. Para liberar solo el registro "
                                  "local confirma detach_old_runtime=true. No se detendrá el runtime antiguo.")
-            allowed = ("unknown", "waiting", "running", "uploading", "submitting", "downloading")
+            allowed = ACTIVE
         else:
             if detach_old_runtime:
                 raise ComfyError("No se puede desvincular el runtime actual sin comprobar su cola.")
@@ -429,13 +453,13 @@ def reconcile_ghost(job_id, *, detach_old_runtime=False, factory=None, client_fa
         if identity_key(client.get("/frutinovelas/identity")) != identity_key(snap.get("identity") or {}):
             raise ComfyError("El runtime cambió; no se puede dar por ausente el trabajo.")
         first, _ = _queue_entries(client.get("/queue"), strict=True)
-        history = client.get("/history/" + prompt_id)
+        history = _history_state(client, prompt_id)
         second, _ = _queue_entries(client.get("/queue"), strict=True)
         all_entries = [e["prompt_id"] for snapshot in (first, second)
                        for group in snapshot.values() for e in group]
         if prompt_id in all_entries:
             raise ComfyError("La generación todavía existe en la cola remota; no es un registro fantasma.")
-        if history.get(prompt_id):
+        if history != "not_found" or _history_state(client, prompt_id) != "not_found":
             raise ComfyError("El resultado está en el historial remoto; Studio debe recuperarlo.")
     finally:
         client.close()

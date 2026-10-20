@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { api, type Chapter, type Scene } from '../api'
 import { useToast } from './Toast'
+import { RecoverQueue } from './RecoverQueue'
 
 const terminal = new Set(['completed', 'failed'])
 const labels: Record<string, string> = { queued: 'En cola', generating: 'Generando escenas', assembling: 'Montando capítulo', completed: 'Capítulo listo', failed: 'Necesita revisión' }
@@ -23,6 +24,12 @@ function RenderPanel({ chapter, scenes, dirty }: { chapter: Chapter; scenes: Sce
     refetchInterval: (q) => q.state.status !== 'error' && q.state.data?.some((r) => !terminal.has(r.state)) ? 5000 : 30_000,
     refetchIntervalInBackground: false })
   const active = runs.data?.some((r) => !terminal.has(r.state))
+  const stop = useMutation({ mutationFn: api.stopChapterRender,
+    onSuccess: (result) => {
+      for (const key of ['chapter-renders', 'generations', 'image-generations']) qc.invalidateQueries({ queryKey: [key] })
+      toast.ok(result.pending_jobs.length ? 'Proceso detenido. Hay trabajos remotos pendientes de confirmar; usa Recuperar cola al reconectar.' : 'Proceso detenido. Los prompts y resultados se conservan.')
+    },
+    onError: (e: Error) => toast.error(e.message) })
   const prepared = scenes.length > 0 && scenes.length <= 60 && scenes.every((s) => s.prompt.trim() && s.parameters.image_prompt?.trim() && s.duration_seconds >= 4 && s.duration_seconds <= 15)
   const start = useMutation({ mutationFn: () => api.renderChapter(chapter.id, chapter.revision, Object.fromEntries(scenes.map((s) => [s.id, s.revision])), crypto.randomUUID()),
     onSuccess: () => { setAutomatic(false); qc.invalidateQueries({ queryKey: ['chapter-renders', chapter.id] }); toast.ok('Capítulo añadido a la cola automática') },
@@ -34,10 +41,15 @@ function RenderPanel({ chapter, scenes, dirty }: { chapter: Chapter; scenes: Sce
     {!prepared && <p className="hint">Prepara ambos prompts y una duración de 4–15 segundos en cada escena (máximo 60).</p>}
     {dirty && <p className="hint">Guarda los cambios antes de iniciar el capítulo.</p>}
     <button className="btn btn-primary" disabled={!automatic || !prepared || dirty || active || start.isPending || runs.isPending || runs.isError} onClick={() => start.mutate()}>Generar capítulo completo</button>
+    <RecoverQueue />
     {runs.isError && <p role="alert">No se pudo consultar el capítulo. <button className="btn btn-sm" onClick={() => runs.refetch()}>Reintentar</button></p>}
     {runs.data?.slice(0, count).map((r) => <article key={r.id} className="image-result">
       <p>{labels[r.state] ?? r.state} · {r.scenes.length} escenas</p>
       {r.error && <p role="alert">{r.error}</p>}
+      {!terminal.has(r.state) && <button className="btn btn-sm" disabled={stop.isPending} onClick={() => {
+        if (window.confirm('¿Detener este capítulo y sus generaciones pendientes? Se conservan prompts, escenas y resultados.')) stop.mutate(r.id)
+      }}>Detener capítulo</button>}
+      {r.state === 'failed' && <button className="btn btn-sm" disabled={!automatic || !prepared || dirty || active || start.isPending || runs.isError} onClick={() => start.mutate()}>Reintentar capítulo guardado</button>}
       {r.result_url && <><video controls preload="none" src={r.result_url} style={{ maxWidth: '100%', maxHeight: 480 }} /><p><a href={r.result_url} download>Descargar capítulo</a></p></>}
     </article>)}
     {runs.data && runs.data.length > count && <button className="btn btn-sm" onClick={() => setCount(count + 5)}>Ver montajes anteriores</button>}

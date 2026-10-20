@@ -6,6 +6,28 @@ import pytest
 from frutinovelas.mcp_controls import queue_chapter_images, queue_full_chapter
 
 
+@pytest.mark.parametrize("prior, expected", [
+    ([{"state": "cancelled"}], "queued"),
+    ([{"state": "failed"}, {"state": "running"}], "existing_active"),
+])
+def test_batch_retries_cancelled_but_respects_older_legitimate_jobs(prior, expected):
+    calls = []
+    def request(method, path, body=None):
+        calls.append(path)
+        if path == "comfy/queue/recover":
+            return {"status": "ok"}
+        if path.endswith("/scenes"):
+            return [{"id": "s", "title": "Irena", "revision": 1, "parameters": {"image_prompt": "Literal ñ"}}]
+        if path.endswith("/image-generations"):
+            return prior
+        if path.endswith("/generate-image"):
+            return {"id": body["request_id"], "state": "queued"}
+        raise AssertionError(path)
+    result = queue_chapter_images("c", str(uuid4()), request)
+    assert calls[0] == "comfy/queue/recover"
+    assert result["results"][0]["action"] == expected
+
+
 def test_batch_image_queues_missing_only_and_retries_are_safe():
     chapter = "chapter-real"
     scenes = [
@@ -16,6 +38,8 @@ def test_batch_image_queues_missing_only_and_retries_are_safe():
     calls = []
     def request(method, path, body=None):
         calls.append((method, path, body))
+        if path == "comfy/queue/recover":
+            return {"status": "ok", "recovered": []}
         if path.endswith("/scenes") and method == "GET":
             return scenes
         if path.endswith("scene1/image-generations"):
@@ -45,6 +69,8 @@ def test_batch_rejects_missing_prompt_before_submitting():
     calls = []
     def request(method, path, body=None):
         calls.append((method, path))
+        if path == "comfy/queue/recover":
+            return {"status": "ok", "recovered": []}
         if path.endswith("/scenes"):
             return scenes
         if path.endswith("image-generations"):
@@ -59,6 +85,8 @@ def test_full_chapter_requires_explicit_approval_and_includes_revisions():
     calls = []
     def request(method, path, body=None):
         calls.append((method, path, body))
+        if path == "comfy/queue/recover":
+            return {"status": "ok", "recovered": []}
         if path == "chapters/c":
             return {"id": "c", "revision": 5}
         if path == "chapters/c/scenes":

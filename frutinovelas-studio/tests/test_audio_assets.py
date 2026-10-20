@@ -109,7 +109,8 @@ def test_pcm_is_content_validated_preserved_deduplicated_and_prepared_without_ff
     assert original_path.read_bytes() == original
 
 
-@pytest.mark.parametrize("content", [b"", b"not audio", wav_bytes()[:-20], wav_bytes(0), wav_bytes(15.01)])
+@pytest.mark.parametrize("content", [b"", b"not audio", wav_bytes()[:-20], wav_bytes(0), wav_bytes(15.01)],
+                         ids=["empty", "invalid", "truncated", "zero-duration", "too-long"])
 def test_invalid_empty_truncated_and_long_audio_is_rejected_without_leaving_files(client, content):
     response = client.post("/api/v1/assets/audio", files={"file": ("voz.wav", content, "audio/wav")})
     assert response.status_code == 422, response.text

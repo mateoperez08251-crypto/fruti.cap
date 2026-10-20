@@ -132,6 +132,53 @@ def request_run(client, chapter, scenes, id=None, **overrides):
     )
 
 
+def test_chapter_request_recovers_historical_image_and_stop_preserves_scene(client, qwen):
+    connect(client)
+    s, _, chapter = setup_cast(client, scene(client))
+    image_id = str(uuid4())
+    response = client.post(f"/api/v1/scenes/{s['id']}/generate-image", json={
+        "request_id": image_id, "expected_revision": s["revision"],
+    })
+    assert response.status_code == 202
+    with session_factory()() as db:
+        job = db.get(GenerationJob, image_id)
+        job.snapshot = {**job.snapshot, "url": "https://dead.example"}
+        db.commit()
+    response = request_run(client, chapter, [s])
+    assert response.status_code == 202, response.text
+    run_id = response.json()["id"]
+    worker = GenerationWorker(client_factory=qwen.client)
+    worker.tick()  # Create the pipeline's first local image job.
+    stop = client.post(f"/api/v1/chapter-renders/{run_id}/stop")
+    assert stop.status_code == 200, stop.text
+    assert stop.json() == {"stopped": True, "pending_jobs": []}
+    worker.tick()
+    assert qwen.posts == []
+    assert client.get(f"/api/v1/scenes/{s['id']}").json() == s
+    assert client.post(f"/api/v1/chapter-renders/{run_id}/stop").json()["pending_jobs"] == []
+    assert request_run(client, chapter, [s]).status_code == 202
+
+
+def test_single_image_request_recovers_historical_reservation(client, qwen):
+    connect(client)
+    s, _, _ = setup_cast(client, scene(client))
+    first = client.post(f"/api/v1/scenes/{s['id']}/generate-image", json={
+        "request_id": str(uuid4()), "expected_revision": s["revision"],
+    }).json()
+    with session_factory()() as db:
+        job = db.get(GenerationJob, first["id"])
+        job.state = "uploading"
+        job.snapshot = {**job.snapshot, "url": "https://dead.example"}
+        db.commit()
+    second = client.post(f"/api/v1/scenes/{s['id']}/generate-image", json={
+        "request_id": str(uuid4()), "expected_revision": s["revision"],
+    })
+    assert second.status_code == 202, second.text
+    assert second.json()["id"] != first["id"]
+    assert client.get(f"/api/v1/scenes/{s['id']}").json() == s
+    assert qwen.posts == []
+
+
 def test_chapter_preflight_and_explicit_opt_in_before_any_gpu_submission(client, qwen, monkeypatch):
     monkeypatch.setattr("frutinovelas.routes.renders.ComfyClient", qwen.client)
     connect(client)

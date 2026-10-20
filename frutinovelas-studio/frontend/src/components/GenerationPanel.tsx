@@ -4,6 +4,7 @@ import { memo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, ApiError, type Generation, type Scene } from '../api'
 import { useToast } from './Toast'
+import { RecoverQueue } from './RecoverQueue'
 
 const terminal = new Set(['completed', 'failed', 'cancelled'])
 const labels: Record<Generation['state'], string> = {
@@ -35,11 +36,6 @@ export const GenerationPanel = memo(function GenerationPanel({ scene, dirty }: {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['generations', scene.id] }); toast.ok('Escena añadida a la cola de generación') },
     onError: (error: ApiError) => { qc.invalidateQueries({ queryKey: ['generations', scene.id] }); toast.error(error.message) },
   })
-  const abandon = useMutation({
-    mutationFn: api.abandonGeneration,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['generations', scene.id] }),
-    onError: (error: ApiError) => toast.error(error.message),
-  })
   const stop = useMutation({ mutationFn: api.stopGeneration,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['generations', scene.id] }); toast.ok('Solicitud de detener enviada') },
     onError: (error: ApiError) => toast.error(error.message),
@@ -62,15 +58,14 @@ export const GenerationPanel = memo(function GenerationPanel({ scene, dirty }: {
       {active ? 'Generación en curso' : 'Generar esta escena'}</button>
     <p className="subtle">Se utiliza la revisión guardada. Las imágenes se ajustan al centro para cubrir 576×1024, conservando los originales.</p>
     {jobs.isError && <p role="alert">No se pudo consultar el progreso. Pulsa actualizar cuando vuelva la conexión.</p>}
+    <RecoverQueue />
     <div className="generation-list" aria-live="polite">{jobs.data?.slice(0, visibleCount).map((job) => <article className="generation-item" key={job.id}>
       <div className="generation-heading"><strong>{labels[job.state]}</strong><span className="chip">r{job.revision_number}</span></div>
       <p className="subtle">{job.duration_seconds} s solicitados · {job.frames} frames · {job.effective_seconds.toFixed(2)} s efectivos · semilla {job.seed}</p>
       {job.revision_number !== scene.revision_number && <p className="subtle">Esta versión usa una revisión anterior de la escena.</p>}
       {job.error && <p className="generation-error">{job.error}</p>}
-      {(job.state === 'unknown' || job.state === 'queued') && <button className="btn btn-ghost btn-sm" disabled={abandon.isPending} onClick={() => {
-        if (window.confirm('Comprueba primero la cola de RunPod. Cerrar este registro no detiene una inferencia remota. ¿Ya comprobaste que puedes cerrar el trabajo?')) abandon.mutate(job.id)
-      }}>{job.state === 'queued' ? 'Cancelar envío pendiente' : 'Marcar como interrumpida'}</button>}
-      {(job.state === 'queued' || job.state === 'waiting' || job.state === 'running') && <button className="btn btn-ghost btn-sm" disabled={stop.isPending} onClick={() => {
+      {(job.state === 'failed' || job.state === 'cancelled') && <button className="btn btn-sm" disabled={!ready || generate.isPending} onClick={() => generate.mutate()}>Reintentar escena guardada</button>}
+      {(job.state === 'queued' || job.state === 'uploading' || job.state === 'waiting' || job.state === 'running') && <button className="btn btn-ghost btn-sm" disabled={stop.isPending} onClick={() => {
         if (window.confirm('¿Detener esta generación? Solo se actuará sobre su trabajo; no se vaciará la cola completa.')) stop.mutate(job.id)
       }}>Detener generación</button>}
       {job.result_url && <><video className="generation-video" src={job.result_url} controls preload="none" />

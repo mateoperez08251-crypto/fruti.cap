@@ -74,12 +74,16 @@ def save_connection(body: ConnectionInput, session: Session = Depends(get_sessio
             )
         )
     session.commit()
+    from frutinovelas.services.queue_recovery import recover_available
+    recover_available(client_factory=ComfyClient)
     return get_connection(session)
 
 
 @router.post("/scenes/{scene_id}/generate", status_code=202)
 def generate_scene(scene_id: str, body: GenerateInput, session: Session = Depends(get_session)):
     try:
+        from frutinovelas.services.queue_recovery import recover_available
+        recover_available(client_factory=ComfyClient)
         job = svc.enqueue(session, scene_id, body.expected_revision, str(body.request_id))
     except scenes.NotFound as exc:
         raise HTTPException(404, str(exc)) from exc
@@ -112,6 +116,17 @@ def generation_status(job_id: str, session: Session = Depends(get_session)):
 @router.post("/generations/{job_id}/abandon")
 def abandon(job_id: str, session: Session = Depends(get_session)):
     job = _job(session, job_id)
+    if job.state == "unknown":
+        # Compatibility endpoint: an uncertain POST is not permission to forget
+        # real remote work and permit a duplicate generation.
+        session.rollback()
+        from frutinovelas.services.queue_control import reconcile_ghost
+        try:
+            reconcile_ghost(job_id, client_factory=ComfyClient)
+        except (ComfyError, httpx.HTTPError, ValueError) as exc:
+            raise HTTPException(409, "No se pudo verificar que el trabajo haya desaparecido. Usa Recuperar cola.") from exc
+        session.expire_all()
+        return svc.public_job(_job(session, job_id))
     if job.state not in ("queued", "unknown"):
         raise HTTPException(409, "Solo puedes cerrar un trabajo sin enviar o de recepción incierta.")
     id = job.id
@@ -216,6 +231,12 @@ def comfy_queue():
         return list_queue()
     except (ComfyError, httpx.HTTPError, ValueError) as exc:
         raise HTTPException(422, "No se pudo consultar la cola. Comprueba el diagnóstico de conexión.") from exc
+
+
+@router.post("/comfy/queue/recover")
+def recover_queue():
+    from frutinovelas.services.queue_recovery import recover_available
+    return recover_available(client_factory=ComfyClient)
 
 
 @router.post("/generations/{job_id}/stop")

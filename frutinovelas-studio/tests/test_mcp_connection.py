@@ -186,7 +186,7 @@ async def test_real_protocol_diagnostic_checks_frutinovelas_without_calling_gene
                 try:
                     await client.get(f"http://127.0.0.1:{port}/")
                     break
-                except httpx2.ConnectError:
+                except (httpx2.ConnectError, httpx2.ConnectTimeout):
                     await asyncio.sleep(0.05)
             result = await connection_status()
         assert result.state == "ready", result.model_dump()

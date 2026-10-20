@@ -126,13 +126,15 @@ ComfyUI. No publica prompts ni entradas de trabajos ajenos.
 
 `stop_comfy_generation(job_id, confirmed=true)` y el botón **Detener
 generación** de los paneles Qwen/H3 intentan cancelar *un solo trabajo*:
-- `queued`: cancela localmente antes de enviarlo.
+- `queued` / `uploading`: cancela localmente antes de enviarlo. El worker comprueba
+  de nuevo el estado antes de enviar `/prompt`, aunque termine una subida en curso.
 - `waiting` / `running`: verifica la identidad del runtime y su cola remota.
   Si está pendiente, envía `POST /queue` con el ID exacto. Si está ejecutándose,
-  solicita `POST /interrupt` **solo si es el único trabajo en ejecución**.
+  solicita `POST /interrupt` con `prompt_id` **solo si es el único trabajo en ejecución**
+  y la versión verificada soporta interrupción por ID. Nunca envía `{}`.
   Un interrupt es asíncrono; Studio conserva la reserva hasta confirmar que
   desapareció de la cola y no puede iniciar otro trabajo prematuramente.
-- `uploading`, `submitting`, `downloading`, `unknown`: se rechaza la
+- `submitting`, `downloading`, `unknown`: se rechaza la
   cancelación destructiva porque la recepción/descarga podría ser ambigua.
   Consultar primero la cola y el historial.
 
@@ -146,6 +148,21 @@ El gateway remoto debe admitir sus rutas nativas autenticadas `/queue` y
 ComfyUI**. El cliente debe especificar el ID real del trabajo y confirmar la
 acción. Los estados remotos se verifican en tiempo real; ComfyUI puede cambiar
 entre lecturas, de modo que ante un conflicto hay que volver a consultar.
+
+El worker, la comprobación de conexión y las solicitudes de generación ejecutan
+recuperación automática con exclusión mutua frente a los envíos. También está
+disponible `POST /api/v1/comfy/queue/recover` y **Recuperar cola** en la interfaz.
+Los registros de conexiones anteriores ausentes del servidor actual se liberan
+localmente, sin contactar ni interrumpir el servidor antiguo. Los trabajos inciertos
+del servidor actual requieren 30 segundos desde el último cambio, cola completa y
+dos comprobaciones de cola e historial. Los resultados remotos se recuperan, no se
+reenvían. Las respuestas ambiguas mantienen la reserva.
+
+`request_chapter_images` reconcilia antes de planificar y permite reintentar trabajos
+cancelados con un `request_id` nuevo. Repetir el ID original sigue siendo idempotente.
+`request_scene_image` usa la misma recuperación mediante su ruta de generación.
+**Detener capítulo** detiene la continuación y cancela únicamente sus propios hijos;
+un hijo remoto incierto sigue reservado hasta que pueda verificarse.
 
 
 ## Diagnóstico de cola fantasma y error get_comfy_queue

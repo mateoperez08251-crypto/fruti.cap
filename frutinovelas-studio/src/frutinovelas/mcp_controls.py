@@ -36,6 +36,7 @@ def _confirm(confirmed: bool):
 def queue_chapter_images(chapter_id: str, request_id: str, request) -> dict:
     """Iniciar imágenes faltantes, con reintentos idempotentes y sin iniciar video."""
     namespace = UUID(_uuid(request_id))
+    request("POST", "comfy/queue/recover")
     scenes = request("GET", f"chapters/{_id(chapter_id)}/scenes")
     if not 1 <= len(scenes) <= 60:
         raise ToolError("El capítulo necesita entre 1 y 60 escenas.")
@@ -45,7 +46,7 @@ def queue_chapter_images(chapter_id: str, request_id: str, request) -> dict:
             raise ToolError(f"La escena «{s['title']}» no tiene prompt de imagen.")
         jobs = request("GET", f"scenes/{_id(s['id'])}/image-generations")
         current = jobs[0] if jobs else None
-        if current and current["state"] not in ("failed", "completed"):
+        if any(job["state"] not in ("failed", "completed", "cancelled") for job in jobs):
             planned.append((s, "existing_active"))
         elif current and current["state"] == "completed":
             planned.append((s, "existing_result"))
@@ -62,7 +63,8 @@ def queue_chapter_images(chapter_id: str, request_id: str, request) -> dict:
                 "expected_revision": s["revision"], "request_id": scene_request,
                 "auto_animate": False,
             })
-            results.append({"scene_id": s["id"], "action": "queued", "job_id": job["id"]})
+            action = "existing_terminal" if job.get("state") in ("failed", "cancelled", "completed") else "queued"
+            results.append({"scene_id": s["id"], "action": action, "job_id": job["id"]})
         except Exception as exc:
             results.append({"scene_id": s["id"], "action": "error", "detail": str(exc)[:240]})
             break
@@ -73,6 +75,7 @@ def queue_chapter_images(chapter_id: str, request_id: str, request) -> dict:
 def queue_full_chapter(chapter_id: str, request_id: str, automatic_approval: bool, request) -> dict:
     if automatic_approval is not True:
         raise ToolError("Para generar videos sin revisión individual confirma automatic_approval=true.")
+    request("POST", "comfy/queue/recover")
     chapter = request("GET", f"chapters/{_id(chapter_id)}")
     scenes = request("GET", f"chapters/{_id(chapter_id)}/scenes")
     if not 1 <= len(scenes) <= 60:

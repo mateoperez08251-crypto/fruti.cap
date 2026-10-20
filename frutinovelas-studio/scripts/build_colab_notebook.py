@@ -1180,8 +1180,15 @@ def build(platform: str) -> dict:
         md("## 10 · Pruebas reales (opcional)"), code(CELL_TESTS),
         md("## 11 · Cierre"), code(CELL_FINISH),
     ]
-    for i, c in enumerate(cells):
+    i = 0
+    for c in cells:
+        # This embedded helper was added with a stable named ID. Keep all
+        # existing notebook cell IDs unchanged when rebuilding on any platform.
+        if c["source"][0].startswith("%%writefile ") and "/scripts/narrated_gateway.py" in c["source"][0]:
+            c["id"] = "fruti-narrated-gateway"
+            continue
         c["id"] = f"fruti-{i:02d}"
+        i += 1
     # Insertar después del token sin renumerar ni modificar las celdas existentes.
     queue_cell = code((ROOT / "scripts" / "colab_queue_cell.py").read_text(encoding="utf-8"))
     queue_cell["id"] = "fruti-queue-controls"
@@ -1195,6 +1202,8 @@ def main() -> int:
         nb = build(platform)
         p["out"].parent.mkdir(parents=True, exist_ok=True)
         p["out"].write_text(json.dumps(nb, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n")
+        if platform == "colab":
+            (ROOT.parent / p["out"].name).write_bytes(p["out"].read_bytes())
         print(f"Libreta generada: {p['out']} ({len(nb['cells'])} celdas)")
     return 0
 

@@ -41,6 +41,8 @@ def _error(exc):
 @router.post("/scenes/{scene_id}/generate-image", status_code=202)
 def generate_image(scene_id: str, body: ImageRequest, session: Session = Depends(get_session)):
     try:
+        from frutinovelas.services.queue_recovery import recover_available
+        recover_available(client_factory=ComfyClient)
         return public_image_job(
             enqueue_image(
                 session,

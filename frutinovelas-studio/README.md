@@ -62,8 +62,22 @@ permanecen intactos. H3 cuantiza la duración a `17k+5` frames: 5 s solicitados 
 La URL puede cambiar si reemplazas el pod. Vuelve a comprobar la conexión. Los trabajos
 ya enviados conservan la conexión e identidad originales y nunca se reasignan a otro
 runtime silenciosamente. Ante timeout después del envío, se comprueba cola e historial
-sin reenviar la solicitud. Si no se puede resolver, revisa la cola remota antes de
-**Marcar como interrumpida** y crear otra versión. Ese botón no interrumpe trabajos ajenos.
+sin reenviar la solicitud. El worker reconcilia automáticamente al reconectar; también
+se comprueba antes de generar y con **Recuperar cola**. Un trabajo ausente del runtime
+actual se libera después de 30 segundos desde su último cambio y dos comprobaciones
+de cola e historial. Una respuesta incompleta, una desconexión o un resultado remoto
+existente mantienen la reserva. Los trabajos locales del runtime actual continúan
+normalmente; los registros de conexiones anteriores se desvinculan sin interrumpir
+esas conexiones. Si solo cambió el túnel y el mismo runtime aún tiene el trabajo o
+su resultado, se conserva y se actualiza únicamente la conexión de transporte.
+
+**Detener generación**, **Detener capítulo** y los botones de reintento conservan
+prompts, escenas, revisiones y assets. Detener un capítulo impide continuar sus
+siguientes escenas; un hijo remoto cuya cancelación no pueda confirmarse conserva
+su reserva hasta recuperarse. Solo se envía interrupción por ID a la versión ComfyUI
+verificada por el kit; nunca se usa una interrupción global como alternativa.
+Los reintentos explícitos crean una solicitud nueva usando la revisión guardada.
+Repetir el mismo `request_id` sigue devolviendo la solicitud original.
 
 La cola y los resultados se guardan en el directorio de datos del usuario, fuera del
 repositorio. El token se cifra con una clave local (`comfy_credentials.key`); incluye

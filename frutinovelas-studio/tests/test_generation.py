@@ -246,6 +246,12 @@ def test_missing_history_never_resubmits_and_active_request_deduplicates(client,
         worker.stop()
     assert remote.posts == []
     assert client.get("/api/v1/generations/" + job["id"]).json()["state"] == "unknown"
+    assert client.post("/api/v1/generations/" + job["id"] + "/abandon").status_code == 409
+    from datetime import timedelta
+    from frutinovelas.models import utcnow
+    with session_factory()() as db:
+        db.get(GenerationJob, job["id"]).updated_at = utcnow() - timedelta(seconds=60)
+        db.commit()
     assert client.post("/api/v1/generations/" + job["id"] + "/abandon").status_code == 200
     assert submit(client, s).json()["id"] != job["id"]
 

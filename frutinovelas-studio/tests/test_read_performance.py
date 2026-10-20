@@ -2,6 +2,7 @@
 
 from collections import Counter
 from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import event
 from sqlalchemy.orm import Session
@@ -106,6 +107,7 @@ def test_progress_reads_summaries_without_loading_scene_history_or_job_snapshots
     with session_factory()() as session:
         for i in range(8):
             job = GenerationJob(
+                created_at=datetime(2026, 1, 1, tzinfo=UTC) + timedelta(seconds=i),
                 scene_id=scene["id"],
                 state="completed",
                 prompt_id=f"prompt-{i}",

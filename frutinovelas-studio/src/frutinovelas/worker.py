@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 from frutinovelas.config import get_settings
 from frutinovelas.db import session_factory
-from frutinovelas.models import Asset, GenerationJob
+from frutinovelas.models import Asset, ComfyConnection, GenerationJob
 from frutinovelas.services.assets import AssetError, asset_path, store_image
 from frutinovelas.services.audio_workflow import AudioWorkflowError, validate_audio_guides
 from frutinovelas.services.comfy import ComfyClient, ComfyError, cipher, identity_key, prepare_graph
@@ -119,6 +119,16 @@ class GenerationWorker:
         self.current_id = None
         if not self.lock.acquire():
             return
+        try:
+            self._tick_locked()
+        finally:
+            # Other workers and recovery endpoints may acquire it between ticks.
+            self.lock.release()
+
+    def _tick_locked(self):
+        from frutinovelas.services.queue_recovery import recover_locked
+
+        recover_locked(self.factory, self.client_factory)
         with self.factory() as session:
             automatic_id = session.scalar(
                 select(GenerationJob.id)
@@ -147,6 +157,13 @@ class GenerationWorker:
             )
             if job is None:
                 return
+            connection = s.get(ComfyConnection, "default")
+            if connection and (
+                job.snapshot.get("url") == connection.url
+                and identity_key(job.snapshot.get("identity") or {}) == identity_key(connection.identity or {})
+            ):
+                # A refreshed token for the same runtime must recover existing jobs.
+                job.encrypted_token = connection.encrypted_token
             s.expunge(job)
         self.current_id = job.id
         p = job.snapshot
@@ -161,7 +178,7 @@ class GenerationWorker:
                 )
                 return
             if job.state in ("queued", "uploading"):
-                if not transition(self.factory, job.id, "uploading"):
+                if not transition(self.factory, job.id, "uploading", expected_states=("queued", "uploading")):
                     return
                 audio_guides = p.get("audio_guides", []) if job.kind == "video" else []
                 voice_references = p.get("voice_references", []) if job.kind == "video" else []
@@ -240,7 +257,7 @@ class GenerationWorker:
                         audio_guides=audio_guides,
                         audio_names=audio_names,
                     )
-                if self.stop_event.is_set() or not transition(self.factory, job.id, "submitting"):
+                if self.stop_event.is_set() or not transition(self.factory, job.id, "submitting", expected_states=("uploading",)):
                     return
                 try:
                     r = client.request(
@@ -281,7 +298,7 @@ class GenerationWorker:
             with self.factory() as guard:
                 fresh = guard.get(GenerationJob, job.id)
                 stop_requested = bool(fresh and fresh.snapshot.get("stop_requested"))
-            if stop_requested:
+            if stop_requested and not history:
                 queue = client.get("/queue")
                 from frutinovelas.services.queue_control import queue_ids
                 running, pending = queue_ids(queue)
@@ -291,13 +308,13 @@ class GenerationWorker:
                 return
             if not history:
                 queue = client.get("/queue")
-                running = {str(x[1]) for x in queue.get("queue_running", []) if len(x) > 1}
-                pending = {str(x[1]) for x in queue.get("queue_pending", []) if len(x) > 1}
+                from frutinovelas.services.queue_control import queue_ids
+                running, pending = queue_ids(queue)
                 if job.prompt_id in running:
                     transition(self.factory, job.id, "running")
                 elif job.prompt_id in pending:
                     transition(self.factory, job.id, "waiting")
-                else:
+                elif job.state != "unknown":
                     transition(
                         self.factory,
                         job.id,

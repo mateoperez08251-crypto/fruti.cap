@@ -226,6 +226,8 @@ const json = (method: string, data: unknown): RequestInit => ({
 export const api = {
   deleteNarratedOutput: (id: string) => request<NarratedVideo>('/narrated-videos/' + id + '/output', { method: 'DELETE' }),
   stopGeneration: (id: string) => request<{ id: string; state: string }>('/generations/' + id + '/stop', { method: 'POST' }),
+  recoverQueue: () => request<{ status: string; recovered: string[] }>('/comfy/queue/recover', { method: 'POST' }),
+  stopChapterRender: (id: string) => request<{ stopped: boolean; pending_jobs: string[] }>('/chapter-renders/' + id + '/stop', { method: 'POST' }),
   comfyQueue: () => request<{ status: string; server: { available: boolean; code: string; message: string }; running: unknown[]; pending: unknown[]; local_jobs: unknown[] }>('/comfy/queue'),
   discardGenerationOutput: (id: string) => request<{discarded: boolean; remote_copy: string}>('/generations/' + id + '/output', { method: 'DELETE' }),
   narratedVideos: (projectId: string) => request<NarratedVideo[]>('/projects/' + projectId + '/narrated-videos'),
