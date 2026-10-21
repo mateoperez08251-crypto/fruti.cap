@@ -91,12 +91,12 @@ function ClientInstructions({ client, info }: { client: Client; info: McpConnect
       <li>Si el MCP no está iniciado, ejecuta el comando siguiente en <strong>{info.shell}</strong> de este equipo y mantén la terminal abierta.</li>
       <li>Inicia tu cliente de túnel de OpenAI y apunta al MCP local. Reutiliza el mismo túnel y, si ya lo tienes, el perfil <code>fruti-local</code>.</li>
       <li>En ChatGPT, abre <strong>Plugins → + → Add custom MCP server</strong>. Selecciona <strong>Connection: Tunnel</strong> y elige ese túnel.</li>
-      <li>Para este MCP elige <strong>No authentication</strong>, crea el plugin con <strong>Create as a plugin</strong> e instálalo. En un chat nuevo, selecciónalo con <strong>@</strong> y ejecuta la prueba de lectura.</li>
+      <li>{info.authentication === 'bearer' ? <>Configura tu cliente o túnel para enviar el token MCP mediante la cabecera <strong>Authorization: Bearer</strong>. Si tu cliente no admite este método, utiliza Claude Desktop por stdio para Flow.</> : <>Para este MCP elige <strong>No authentication</strong>, crea el plugin con <strong>Create as a plugin</strong> e instálalo. En un chat nuevo, selecciónalo con <strong>@</strong> y ejecuta la prueba de lectura. Flow requiere stdio o HTTP autenticado.</>}</li>
     </ol>
     <CopyBlock id="mcp-http-command" label={`Comando MCP HTTP · ${info.shell}`} value={info.http_command} rows={3} />
     <CopyBlock id="mcp-local-url" label="URL local del MCP para el túnel" value={info.local_url} rows={1} />
     <p className="hint">Esta URL conecta tunnel-client con el MCP de tu equipo. En ChatGPT se selecciona el túnel; localhost no es una URL pública.</p>
-    <p className="hint">«No authentication» corresponde a este servidor MCP. El cliente de túnel utiliza su propia configuración privada de OpenAI.</p>
+    <p className="hint">{info.authentication === 'bearer' ? 'El token MCP se conserva en la configuración local y no se muestra en este panel.' : '«No authentication» corresponde a este servidor MCP. El cliente de túnel utiliza su propia configuración privada de OpenAI.'}</p>
     <div className="mcp-doc-links">
       <a className="mcp-doc-link" href="https://chatgpt.com/plugins" target="_blank" rel="noreferrer">Abrir Plugins de ChatGPT <ExternalLink size={14} aria-hidden="true" /></a>
       <a className="mcp-doc-link" href="https://platform.openai.com/settings/organization/tunnels" target="_blank" rel="noreferrer">Abrir mis túneles de OpenAI <ExternalLink size={14} aria-hidden="true" /></a>

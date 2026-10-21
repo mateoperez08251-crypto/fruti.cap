@@ -36,6 +36,7 @@ from frutinovelas.migrate import upgrade_to_head
 from frutinovelas.routes import (
     assets,
     characters,
+    flow,
     generation,
     images,
     mcp_connection,
@@ -94,12 +95,16 @@ async def lifespan(_app: FastAPI):
     recover_interrupted()
     log.info("Datos en %s", settings.resolved_data_dir)
     worker = GenerationWorker()
+    from frutinovelas.flow_worker import FlowWorker
+    flow_worker = FlowWorker()
     if settings.embedded_worker:
         worker.start()
+        flow_worker.start()
     try:
         yield
     finally:
         worker.stop()
+        flow_worker.stop()
 
 
 def create_app() -> FastAPI:
@@ -125,6 +130,10 @@ def create_app() -> FastAPI:
             status_code=409,
         )
 
+    @app.exception_handler(flow.FlowError)
+    async def flow_conflict(_request: Request, exc: flow.FlowError):
+        return JSONResponse({"detail": str(exc)}, status_code=409)
+
     @app.middleware("http")
     async def require_token(request: Request, call_next):
         token = settings.api_token
@@ -134,7 +143,7 @@ def create_app() -> FastAPI:
                 return JSONResponse({"detail": "Se requiere autorización."}, status_code=401)
         return await call_next(request)
 
-    for module in (system, projects, scenes, assets, generation, prompts, characters, images, renders, mcp_connection, narrated):
+    for module in (system, projects, scenes, assets, generation, prompts, characters, images, renders, mcp_connection, narrated, flow):
         app.include_router(module.router, prefix=API_PREFIX)
 
     ui = frontend_dir()

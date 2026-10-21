@@ -67,7 +67,7 @@ def test_recovery_preserves_projects_characters_jobs_and_credentials(data_dir, s
         assert db.execute("SELECT encrypted_token FROM comfy_connections").fetchone() == (
             "preserve-encrypted-token",
         )
-        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("0007",)
+        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("0008",)
         assert db.execute("PRAGMA quick_check").fetchone() == ("ok",)
     backups = list((data_dir / "backups").glob("*.sqlite3"))
     assert len(backups) == 1

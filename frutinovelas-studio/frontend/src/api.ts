@@ -144,7 +144,7 @@ export type McpConnectionInfo = {
   local_url: string
   host: string
   port: number
-  authentication: 'none'
+  authentication: 'none' | 'bearer'
   shell: 'PowerShell' | 'Terminal'
   http_command: string
   stdio_command: string
@@ -203,7 +203,7 @@ function describe(detail: unknown): string {
   return 'Error inesperado del servidor.'
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   let res: Response
   try {
     res = await fetch(BASE + path, init)

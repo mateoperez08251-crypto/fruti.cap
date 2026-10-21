@@ -9,6 +9,7 @@ import { NarratedPage } from './pages/NarratedPage'
 import { ProjectPage } from './pages/ProjectPage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { ConnectionPage } from './pages/ConnectionPage'
+import { FlowPage } from './pages/FlowPage'
 import { McpConnectionDialog } from './components/McpConnectionDialog'
 
 function Sidebar({ onMcpOpen, mcpButton, mcpOpen }: { onMcpOpen: () => void; mcpButton: RefObject<HTMLButtonElement | null>; mcpOpen: boolean }) {
@@ -32,6 +33,9 @@ function Sidebar({ onMcpOpen, mcpButton, mcpOpen }: { onMcpOpen: () => void; mcp
       </NavLink>
       <NavLink to="/conexion" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
         <PlugZap size={16} /> <span>Conexión ComfyUI</span>
+      </NavLink>
+      <NavLink to="/flow-automation" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+        <Film size={16} /> <span>Flow Automation</span>
       </NavLink>
       <button id="nav-mcp" ref={mcpButton} type="button" className="nav-item nav-mcp" onClick={onMcpOpen}
         aria-haspopup="dialog" aria-expanded={mcpOpen} aria-controls={mcpOpen ? 'mcp-connection-dialog' : undefined}>
@@ -76,6 +80,7 @@ export default function App() {
           <Route path="/" element={<ProjectsPage />} />
           <Route path="/videos-narrados" element={<NarratedPage />} />
           <Route path="/conexion" element={<ConnectionPage />} />
+          <Route path="/flow-automation" element={<FlowPage />} />
           <Route path="/proyectos/:projectId" element={<ProjectRoute />} />
           <Route path="/capitulos/:chapterId" element={<ChapterRoute />} />
           <Route
