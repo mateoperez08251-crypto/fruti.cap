@@ -1,11 +1,15 @@
 import { request } from './api'
 
 export type FlowMode = 'assisted' | 'uia'
+export type FlowAgentStatus = {
+  reachable?: boolean; profile_configured?: boolean | null; window_title?: string | null
+  available: boolean; window_open: boolean | null; flow_available: boolean | null; authentication: string
+  detail: string; modes: Record<string, { aspect_ratios: string[]; durations: number[]; reference_count: number }>
+}
 export type FlowStatus = {
   connected: boolean
   mode: FlowMode
-  agent: { available: boolean; window_open: boolean; flow_available: boolean | null; authentication: string;
-    detail: string; modes: Record<string, { aspect_ratios: string[]; durations: number[]; reference_count: number }> }
+  agent: FlowAgentStatus
 }
 export type FlowJob = {
   id: string; batch_id: string; project_id: string; chapter_id: string; scene_id: string; title: string
@@ -23,6 +27,24 @@ export type FlowPlan = {
 const json = (data: unknown): RequestInit => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
 export const flowApi = {
   status: () => request<FlowStatus>('/flow/status'),
+  detect: async () => {
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 20000)
+    try {
+      const agent = await request<FlowAgentStatus>('/flow/detect', { signal: controller.signal })
+      if (controller.signal.aborted || !agent || typeof agent.available !== 'boolean'
+        || ![true, false, null].includes(agent.window_open) || typeof agent.detail !== 'string'
+        || !agent.modes || typeof agent.modes !== 'object') {
+        throw new Error('La detección devolvió una respuesta incompleta. Reinicia Studio y el agente para volver a comprobarla.')
+      }
+      return agent
+    } catch (error) {
+      if (controller.signal.aborted) throw new Error('La detección tardó demasiado. Comprueba que Studio y el agente estén abiertos y vuelve a detectar.', { cause: error })
+      throw error
+    } finally {
+      window.clearTimeout(timeout)
+    }
+  },
   connect: (mode: FlowMode, authorized: boolean) => request('/flow/connect', json({ mode, authorized })),
   disconnect: () => request('/flow/disconnect', json({})),
   focus: () => request('/flow/focus', json({})),

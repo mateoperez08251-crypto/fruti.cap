@@ -77,6 +77,26 @@ de Userflex ni modificar los workflows Qwen/H3.
 
 ## Uso inmediato: modo asistido
 
+**Detectar Userflex / Flow** muestra «Detectando…» durante la consulta y deja un
+resultado visible con la hora de la comprobación. Si encuentra la ventana, muestra
+su título; **Enfocar ventana** la lleva al frente en Windows. No conecta el controlador
+ni solicita generaciones al detectar.
+
+- **Agente Windows sin conexión:** abre `iniciar_flow_agente.cmd` en el mismo equipo
+  que Studio. No significa que Userflex esté cerrado: su ventana no pudo comprobarse.
+- **Agente conectado; falta configurar Userflex:** prepara el perfil local con el
+  diagnóstico de la sección de instalación y reinicia el agente.
+- **No se pudo identificar la ventana:** abre Userflex/Flow y comprueba el perfil;
+  también puede haber varias ventanas que coincidan.
+- **Ventana encontrada; Flow no detectado** o **sesión sin verificar:** abre la sección
+  Flow, revisa tu sesión y los controles configurados antes de volver a detectar.
+- **Userflex y Flow detectados:** los controles configurados respondieron; este resultado
+  no sustituye la prueba real de generación y descarga.
+
+Si falla la consulta o excede 20 segundos, aparece un error y puedes repetirla.
+Después de actualizar el programa, ejecuta `iniciar.cmd` para recompilar la interfaz
+y reinicia también `iniciar_flow_agente.cmd` para cargar el nuevo diagnóstico.
+
 1. Inicia Studio con `iniciar.cmd` y entra en **Flow Automation** desde la barra lateral
    o **Generar con Flow** desde un capítulo.
 2. Elige **Asistido** y confirma que tienes autorización para usarlo con tu sesión.
@@ -288,5 +308,5 @@ Aceptación real pendiente, antes de procesar un capítulo completo:
 6. Interrumpir la conexión tras el envío, reiniciar agente/Studio y comprobar que no
    se genere una segunda solicitud. Probar cuota, verificación humana y cancelación.
 
-Hasta completar estas pruebas, el PR permanece como borrador y la automatización
-completa de la ventana Userlfex no debe presentarse como comprobada.
+Hasta completar estas pruebas, la automatización completa de la ventana Userlfex
+no debe presentarse como comprobada, aunque el código ya esté incorporado en `main`.

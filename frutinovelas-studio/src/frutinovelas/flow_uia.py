@@ -198,11 +198,13 @@ class UIADriver:
     @uia_thread
     def status(self):
         result = {"available": False, "window_open": False, "flow_available": None,
+                  "window_title": None,
                   "authentication": "unknown", "modes": {}, "remote_cancel_supported": False,
                   "detail": "Perfil sin verificar; ejecuta verify-profile en Windows."}
         try:
-            self._window()
+            window = self._window()
             result["window_open"] = True
+            result["window_title"] = window.window_text()
             result["flow_available"] = self.find(self.profile.flow_marker, optional=True) is not None
             if self.find(self.profile.authenticated_marker, optional=True) is not None:
                 result["authentication"] = "verified_by_control"
