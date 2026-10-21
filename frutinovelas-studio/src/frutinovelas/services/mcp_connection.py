@@ -30,7 +30,7 @@ class McpConnectionInfo(BaseModel):
     local_url: str
     host: str
     port: int
-    authentication: Literal["none"] = "none"
+    authentication: Literal["none", "bearer"] = "none"
     shell: Literal["PowerShell", "Terminal"]
     http_command: str
     stdio_command: str
@@ -97,6 +97,7 @@ def connection_info() -> McpConnectionInfo:
         local_url=url,
         host=host,
         port=port,
+        authentication="bearer" if settings.mcp_token else "none",
         shell="PowerShell" if windows else "Terminal",
         http_command=shell_command([executable, *http_arguments], windows=windows),
         stdio_command=shell_command([executable, *stdio_arguments], windows=windows),
@@ -123,7 +124,8 @@ async def connection_status() -> McpConnectionStatus:
     try:
         async with asyncio.timeout(6):
             async with httpx2.AsyncClient(
-                trust_env=False, follow_redirects=False, timeout=httpx2.Timeout(2.5, connect=1.5)
+                trust_env=False, follow_redirects=False, timeout=httpx2.Timeout(2.5, connect=1.5),
+                headers={"Authorization": "Bearer " + get_settings().mcp_token} if get_settings().mcp_token else {},
             ) as client:
                 async with streamable_http_client(url, http_client=client) as streams:
                     async with ClientSession(*streams) as session:

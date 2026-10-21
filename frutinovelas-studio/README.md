@@ -1,5 +1,14 @@
 # FRUTINOVELAS Studio
 
+## Flow Automation (en revisión)
+
+Flow es un proveedor adicional con cola persistente, aprobación de imágenes, historial
+por escena y herramientas MCP. Incluye un modo asistido ejecutable con descargas reales
+y un agente Windows UIA que requiere un perfil de controles verificado localmente.
+**La compatibilidad de extremo a extremo con Userlfex todavía no está comprobada.**
+Consulta [instalación, capacidades, recuperación y prueba pendiente](docs/FLOW_AUTOMATION.md).
+Qwen, H3 y sus workflows existentes se conservan.
+
 Las imágenes nuevas usan **Qwen-Image-2.1 BF16, 1152×2048 y 40 pasos** cuando
 el servidor publica el nuevo perfil. La libreta Colab y el kit remoto lo activan
 por defecto. Actualiza ambos lados y vuelve a comprobar la conexión.

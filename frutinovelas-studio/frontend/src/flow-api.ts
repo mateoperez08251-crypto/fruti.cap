@@ -1,0 +1,41 @@
+import { request } from './api'
+
+export type FlowMode = 'assisted' | 'uia'
+export type FlowStatus = {
+  connected: boolean
+  mode: FlowMode
+  agent: { available: boolean; window_open: boolean; flow_available: boolean | null; authentication: string;
+    detail: string; modes: Record<string, { aspect_ratios: string[]; durations: number[]; reference_count: number }> }
+}
+export type FlowJob = {
+  id: string; batch_id: string; project_id: string; chapter_id: string; scene_id: string; title: string
+  kind: 'image' | 'video'; state: string; approval: string; error: string; scene_revision: number
+  cancel_requested: boolean; remote_stopped: boolean; dependency_id: string | null
+  result_asset_id: string | null; result_url: string | null; created_at: string
+  requested_duration: number | null; result_metadata: { duration_seconds?: number; has_audio?: boolean }
+  snapshot?: { prompt: string; original_prompt: string; references: { asset_id: string; sha256: string }[]; aspect_ratio: string }
+}
+export type FlowPlan = {
+  request_id: string; project_id: string; chapter_id: string; scene_revisions: Record<string, number>
+  generation_mode: 'image' | 'video' | 'image_video'; automatic_approval: boolean
+  prompts: Record<string, string>; video_prompts: Record<string, string>; duration_seconds: number | null
+}
+const json = (data: unknown): RequestInit => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+export const flowApi = {
+  status: () => request<FlowStatus>('/flow/status'),
+  connect: (mode: FlowMode, authorized: boolean) => request('/flow/connect', json({ mode, authorized })),
+  disconnect: () => request('/flow/disconnect', json({})),
+  focus: () => request('/flow/focus', json({})),
+  generate: (plan: FlowPlan) => request<FlowJob[]>('/flow/generate', json(plan)),
+  jobs: (project: string, chapter: string) => request<FlowJob[]>(`/flow/jobs?project_id=${encodeURIComponent(project)}&chapter_id=${encodeURIComponent(chapter)}`),
+  job: (id: string) => request<FlowJob>(`/flow/jobs/${id}`),
+  cancel: (id: string) => request<FlowJob>(`/flow/jobs/${id}/cancel`, json({})),
+  retry: (id: string, request_id: string) => request<FlowJob>(`/flow/jobs/${id}/retry`, json({ request_id })),
+  review: (id: string, expected_revision: number, decision: 'approved' | 'rejected') =>
+    request<FlowJob>(`/flow/jobs/${id}/review`, json({ expected_revision, decision })),
+  resolve: (id: string, note: string) => request<FlowJob>(`/flow/jobs/${id}/resolve`, json({ confirmed_no_remote_work: true, note })),
+  import: (id: string, file: File) => {
+    const data = new FormData(); data.append('file', file)
+    return request<FlowJob>(`/flow/jobs/${id}/import`, { method: 'POST', body: data })
+  },
+}

@@ -22,6 +22,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+flow-agent = [
+    "pywinauto>=0.6.8,<0.7; sys_platform == 'win32'",
+    "psutil>=6,<8; sys_platform == 'win32'",
+]
 dev = [
     "aiohttp>=3.10",
     "pytest>=8",
@@ -37,6 +41,7 @@ frutinovelas-worker = "frutinovelas.worker:main"
 frutinovelas-mcp = "frutinovelas.mcp_server:main"
 frutinovelas-doctor = "frutinovelas.doctor:main"
 frutinovelas-prompts = "frutinovelas.prompts:main"
+frutinovelas-flow-agent = "frutinovelas.flow_agent:main"
 
 [build-system]
 requires = ["hatchling"]

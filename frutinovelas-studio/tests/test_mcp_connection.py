@@ -15,7 +15,12 @@ import pytest
 
 from frutinovelas.config import Settings, get_settings, reset_settings_cache
 from frutinovelas.mcp_server import main
-from frutinovelas.services.mcp_connection import connection_info, connection_status, local_address, shell_command
+from frutinovelas.services.mcp_connection import (
+    connection_info,
+    connection_status,
+    local_address,
+    shell_command,
+)
 
 
 def test_configuration_uses_actual_runtime_without_exporting_any_token(client, monkeypatch, tmp_path):
@@ -34,7 +39,7 @@ def test_configuration_uses_actual_runtime_without_exporting_any_token(client, m
     assert response.headers["cache-control"] == "no-store"
     data = response.json()
     assert data["local_url"] == "http://127.0.0.1:9006/mcp"
-    assert data["authentication"] == "none"
+    assert data["authentication"] == "bearer"
     assert data["api_token_configured"] is True
     entry = data["claude_desktop_config"]["mcpServers"]["frutinovelas"]
     assert entry["command"] == str(Path(sys.executable).absolute())

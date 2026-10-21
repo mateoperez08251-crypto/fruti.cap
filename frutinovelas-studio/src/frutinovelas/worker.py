@@ -21,7 +21,11 @@ from frutinovelas.services.comfy import ComfyClient, ComfyError, cipher, identit
 from frutinovelas.services.generation import ACTIVE, transition
 from frutinovelas.services.image_generation import finish_automatic_image, graph_contract, prepare_image_graph
 from frutinovelas.services.reference_prep import isolated_reference
-from frutinovelas.services.voice_workflow import VoiceWorkflowError, prepare_voice_graph, validate_voice_references
+from frutinovelas.services.voice_workflow import (
+    VoiceWorkflowError,
+    prepare_voice_graph,
+    validate_voice_references,
+)
 
 log = logging.getLogger(__name__)
 
@@ -474,7 +478,12 @@ def main():
 
     upgrade_to_head()
     worker = GenerationWorker()
+    from frutinovelas.flow_worker import FlowWorker
+    flow_worker = FlowWorker()
+    flow_worker.start()
     try:
         worker.run()
     except KeyboardInterrupt:
         worker.stop()
+    finally:
+        flow_worker.stop()

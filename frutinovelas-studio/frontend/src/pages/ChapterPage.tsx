@@ -233,6 +233,7 @@ export function ChapterPage({ chapterId }: { chapterId: string }) {
               {ready} listas
             </span>
             <span className="chip">≈ {total.toLocaleString('es', { maximumFractionDigits: 1 })} s solicitados</span>
+            {c && <Link className="btn btn-ghost btn-sm" to={`/flow-automation?project_id=${c.project_id}&chapter_id=${c.id}`}>Generar con Flow</Link>}
           </div>
         </div>
         <nav className="tabs" aria-label="Secciones del capítulo">

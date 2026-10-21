@@ -76,6 +76,9 @@ class Settings(BaseSettings):
     worker_lease_seconds: float = Field(default=30.0, validation_alias="FRUTINOVELAS_WORKER_LEASE_SECONDS")
     # Ejecutar el coordinador dentro del proceso de la API (cómodo en local).
     embedded_worker: bool = Field(default=True, validation_alias="FRUTINOVELAS_EMBEDDED_WORKER")
+    flow_agent_port: int = Field(default=8767, ge=1, le=65535, validation_alias="FRUTINOVELAS_FLOW_AGENT_PORT")
+    flow_poll_seconds: float = Field(default=5, ge=2, validation_alias="FRUTINOVELAS_FLOW_POLL_SECONDS")
+    flow_max_video_mb: int = Field(default=512, ge=1, le=2048, validation_alias="FRUTINOVELAS_FLOW_MAX_VIDEO_MB")
 
     comfy_connect_timeout: float = Field(default=10.0, validation_alias="FRUTINOVELAS_COMFY_CONNECT_TIMEOUT")
     comfy_request_timeout: float = Field(default=60.0, validation_alias="FRUTINOVELAS_COMFY_REQUEST_TIMEOUT")

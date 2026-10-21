@@ -239,3 +239,45 @@ class NarratedVideo(TimestampMixin, Base):
 
     __mapper_args__ = {"version_id_col": revision, "version_id_generator": False}
     audio_asset: Mapped[Asset] = relationship(foreign_keys=[audio_asset_id])
+
+
+class FlowBatch(TimestampMixin, Base):
+    __tablename__ = "flow_batches"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
+    chapter_id: Mapped[str] = mapped_column(ForeignKey("chapters.id"), index=True)
+    specification: Mapped[dict[str, Any]] = mapped_column(JSON)
+
+
+class FlowJob(TimestampMixin, Base):
+    """Independent provider queue. Unknown submissions retain their reservation."""
+    __tablename__ = "flow_jobs"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    batch_id: Mapped[str] = mapped_column(ForeignKey("flow_batches.id"), index=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
+    chapter_id: Mapped[str] = mapped_column(ForeignKey("chapters.id"), index=True)
+    scene_id: Mapped[str] = mapped_column(ForeignKey("scenes.id"), index=True)
+    active_key: Mapped[str | None] = mapped_column(String(80), unique=True, nullable=True)
+    position: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(16))
+    state: Mapped[str] = mapped_column(String(32), index=True)
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
+    dependency_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    approval: Mapped[str] = mapped_column(String(16), default="pending")
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    remote_stopped: Mapped[bool] = mapped_column(Boolean, default=False)
+    error: Mapped[str] = mapped_column(Text, default="")
+    result_asset_id: Mapped[str | None] = mapped_column(ForeignKey("assets.id"), nullable=True)
+    result_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    result_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    result_mime: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    result_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
+class FlowConnection(TimestampMixin, Base):
+    __tablename__ = "flow_connections"
+    id: Mapped[str] = mapped_column(String(16), primary_key=True, default="default")
+    connected: Mapped[bool] = mapped_column(Boolean, default=False)
+    mode: Mapped[str] = mapped_column(String(16), default="assisted")
+    agent_id: Mapped[str] = mapped_column(String(36), default="")
