@@ -269,9 +269,9 @@ def create_agent_app(journal=None, driver=None, *, start_runner=True):
 
     @app.get("/status")
     def status():
-        result = driver.status() if driver else {"available": False, "window_open": False, "flow_available": None,
-                                               "authentication": "unknown", "modes": {}, "detail": "Falta un perfil UIA verificado."}
-        return {**result, "agent_id": journal.identity}
+        result = driver.status() if driver else {"available": False, "window_open": None, "flow_available": None,
+                                               "authentication": "unknown", "modes": {}, "detail": "El agente está abierto, pero falta configurar el perfil de Userflex. Consulta la guía de instalación de Flow Automation."}
+        return {**result, "agent_id": journal.identity, "profile_configured": driver is not None}
 
     @app.post("/focus")
     def focus():

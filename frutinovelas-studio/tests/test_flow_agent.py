@@ -176,6 +176,16 @@ def test_agent_rejects_identity_and_arbitrary_actions(data_dir, tmp_path):
         assert c.post("/click", json={"x": 1, "y": 1}, headers=headers).status_code == 404
 
 
+def test_agent_reports_missing_profile_as_unknown_window(data_dir, tmp_path):
+    headers = {"Authorization": "Bearer " + local_secret("agent")}
+    with TestClient(create_agent_app(Journal(tmp_path), start_runner=False)) as c:
+        result = c.get("/status", headers=headers)
+        assert result.status_code == 200
+        assert result.json()["profile_configured"] is False
+        assert result.json()["window_open"] is None
+        assert result.json()["available"] is False
+
+
 def test_transport_preserves_uncertainty_for_journal_conflicts(data_dir):
     client = FlowClient()
     client.close()

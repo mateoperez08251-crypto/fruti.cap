@@ -3,7 +3,7 @@ import { Check, Download, Image as ImageIcon, Loader2, PlugZap, RefreshCw } from
 import { useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, type Scene } from '../api'
-import { flowApi, type FlowJob, type FlowMode, type FlowPlan } from '../flow-api'
+import { flowApi, type FlowAgentStatus, type FlowJob, type FlowMode, type FlowPlan, type FlowStatus } from '../flow-api'
 import { ConfirmDialog } from '../components/Dialogs'
 import { useToast } from '../components/Toast'
 
@@ -13,6 +13,34 @@ const flowLabels: Record<string, string> = {
   awaiting_import: 'Espera tu descarga', awaiting_approval: 'Espera aprobación de imagen',
   unknown: 'Recepción incierta', blocked: 'Requiere intervención', cancel_requested: 'Detención remota sin confirmar',
   completed: 'Completado · archivo verificado', failed: 'Fallido', cancelled: 'Cancelado localmente',
+}
+
+function detectionMessage(agent: FlowAgentStatus) {
+  if (agent.reachable === false) return {
+    title: 'Agente Windows sin conexión',
+    next: 'Ejecuta iniciar_flow_agente.cmd en el mismo equipo que Studio y vuelve a detectar. No se pudo comprobar si Userflex está abierto.',
+  }
+  if (agent.profile_configured === false) return {
+    title: 'Agente conectado; falta configurar Userflex',
+    next: 'Configura el perfil de la ventana siguiendo la guía de instalación y reinicia el agente. Todavía no se puede comprobar si Userflex está abierto.',
+  }
+  if (!agent.window_open) return {
+    title: 'No se pudo identificar la ventana de Userflex',
+    next: 'Abre Userflex con Flow. Si ya está abierto, revisa que el perfil corresponda a esa ventana y que haya una sola coincidencia.',
+  }
+  if (agent.flow_available !== true) return {
+    title: agent.flow_available === false ? 'Ventana encontrada; Flow no detectado' : 'Ventana encontrada; Flow sin verificar',
+    next: 'Abre la sección Flow dentro de Userflex y vuelve a detectar. Si continúa igual, revisa los controles del perfil.',
+  }
+  if (agent.authentication !== 'verified_by_control') return {
+    title: 'Ventana y Flow detectados; sesión sin verificar',
+    next: 'Comprueba tu sesión en la ventana de Userflex. La detección todavía no confirma que puedas generar.',
+  }
+  if (!agent.available) return {
+    title: 'Ventana y Flow detectados; controlador pendiente',
+    next: 'Revisa y verifica el perfil local antes de conectar el controlador Windows.',
+  }
+  return { title: 'Userflex y Flow detectados', next: 'Pulsa Enfocar ventana para ver la ventana identificada en tu escritorio.' }
 }
 
 function FlowResult({ job, scene, refresh }: { job: FlowJob; scene?: Scene; refresh: () => void }) {
@@ -149,22 +177,39 @@ export function FlowPage() {
   const projects = useQuery({ queryKey: ['projects'], queryFn: () => api.projects() })
   const chapters = useQuery({ queryKey: ['chapters', projectId], queryFn: () => api.chapters(projectId), enabled: !!projectId })
   const status = useQuery({ queryKey: ['flow-status'], queryFn: flowApi.status, refetchInterval: 30000, refetchIntervalInBackground: false, retry: 0 })
+  const detection = useMutation({
+    mutationFn: async () => ({ agent: await flowApi.detect(), checkedAt: new Date().toISOString() }),
+    onSuccess: ({ agent }) => qc.setQueryData<FlowStatus>(['flow-status'], previous => previous ? { ...previous, agent } : previous),
+  })
+  const agent = detection.isError ? undefined : detection.data?.agent ?? status.data?.agent
+  const detectionError = detection.error ?? (!detection.data && status.error)
+  const message = detection.isPending ? { title: 'Buscando Userflex y Flow…', next: 'Comprobando el agente y la ventana configurada. Espera unos segundos.' }
+    : detectionError ? { title: 'No se pudo completar la detección', next: detectionError.message }
+      : agent ? detectionMessage(agent) : { title: 'Comprobando agente local…', next: 'También puedes pulsar Detectar Userflex / Flow.' }
   const connect = useMutation({ mutationFn: () => status.data?.connected ? flowApi.disconnect() : flowApi.connect(mode, authorized),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['flow-status'] }), onError: (e: Error) => toast.error(e.message) })
   return <div className="page flow-page">
     <header className="page-head"><div><div className="eyebrow">PROVEEDOR ADICIONAL</div><h1>Flow Automation</h1><p className="muted">Imágenes, revisión y animación por escena.</p></div></header>
     <section className="card flow-section">
       <div className="row flow-between"><h2><PlugZap size={20} /> Conexión</h2><span className="flow-state">{status.data?.connected ? `Conectado · ${status.data.mode === 'uia' ? 'Control Windows' : 'Modo asistido'}` : 'Desconectado'}</span></div>
-      <p className="notice">{status.data?.agent.detail ?? 'Comprobando agente local…'}</p>
-      {status.data && <p className="hint">Ventana: {status.data.agent.window_open ? 'abierta' : 'sin detectar'} · Flow: {status.data.agent.flow_available == null ? 'sin verificar' : status.data.agent.flow_available ? 'detectado' : 'sin detectar'} · Sesión: {status.data.agent.authentication === 'verified_by_control' ? 'verificada por control accesible' : 'sin verificar'}</p>}
+      <div className="notice" role={detectionError && !detection.isPending ? 'alert' : 'status'} aria-label="Resultado de detección" aria-busy={detection.isPending}>
+        <div><strong>{message.title}</strong><p>{message.next}</p>
+          {!detection.isPending && !detectionError && agent && <>
+            {agent.window_open && agent.window_title && <p>Ventana identificada: <strong>{agent.window_title}</strong></p>}
+            <p className="hint">{agent.detail}</p>
+          </>}
+          {detection.isSuccess && <p className="hint">Última detección: <time dateTime={detection.data.checkedAt}>{new Date(detection.data.checkedAt).toLocaleTimeString()}</time></p>}
+        </div>
+      </div>
+      {!detection.isPending && agent && <p className="hint">Ventana: {agent.window_open == null ? 'sin comprobar' : agent.window_open ? 'abierta' : 'sin identificar'} · Flow: {agent.flow_available == null ? 'sin verificar' : agent.flow_available ? 'detectado' : 'sin detectar'} · Sesión: {agent.authentication === 'verified_by_control' ? 'verificada por control accesible' : 'sin verificar'}</p>}
       <div className="field"><label htmlFor="flow-mode">Controlador</label><select id="flow-mode" className="input" disabled={status.data?.connected} value={status.data?.connected ? status.data.mode : mode} onChange={e => setMode(e.target.value as FlowMode)}>
         <option value="assisted">Asistido: generar en Flow e importar la descarga</option><option value="uia">Windows UIA: requiere perfil local verificado</option>
       </select></div>
       {!status.data?.connected && <label className="flow-check"><input type="checkbox" checked={authorized} onChange={e => setAuthorized(e.target.checked)} /> Tengo autorización para usar este controlador con mi sesión.</label>}
       <div className="row"><button className="btn btn-primary" disabled={connect.isPending || (!status.data?.connected && !authorized)} onClick={() => connect.mutate()}>{status.data?.connected ? 'Desconectar y pausar cola' : 'Conectar'}</button>
-        <button className="btn" onClick={() => status.refetch()}>Detectar Userlfex / Flow</button>
-        <button className="btn btn-ghost" disabled={!status.data?.agent.window_open} onClick={() => flowApi.focus().catch((e: Error) => toast.error(e.message))}>Enfocar ventana</button></div>
-      {status.isError && <p role="alert">No se pudo consultar el agente.</p>}
+        <button className="btn" disabled={detection.isPending} onClick={() => detection.mutate()}>
+          {detection.isPending && <Loader2 size={16} className="spin" />}{detection.isPending ? 'Detectando…' : 'Detectar Userflex / Flow'}</button>
+        <button className="btn btn-ghost" disabled={detection.isPending || !agent?.window_open} onClick={() => flowApi.focus().catch((e: Error) => toast.error(e.message))}>Enfocar ventana</button></div>
       <details><summary>Instalación y conexión MCP</summary><p className="muted">Abre <code>iniciar_flow_agente.cmd</code> en Windows. La guía <code>docs/FLOW_AUTOMATION.md</code> explica el diagnóstico, la verificación de controles y la recuperación. El MCP local por stdio incluye Flow; HTTP requiere un token MCP configurado. Sin perfil verificado, utiliza el modo asistido.</p></details>
     </section>
     <section className="card flow-section flow-form-grid">
