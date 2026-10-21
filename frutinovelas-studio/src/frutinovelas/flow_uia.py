@@ -250,14 +250,34 @@ class UIADriver:
                 element.set_edit_text(str(value))
 
 
+def _diagnostic_control(info, *, include_edit_labels=False):
+    """Read UIA identity metadata, never Value/Text patterns or password names."""
+    kind = info.control_type
+    title = info.name if kind in ("Button", "TabItem", "MenuItem", "ComboBox", "CheckBox") else ""
+    result = {"control_type": kind, "auto_id": info.automation_id,
+              "title": title[:200], "framework_id": info.framework_id}
+    if kind == "Edit" and include_edit_labels:
+        try:
+            if info.element.CurrentIsPassword not in (False, 0):
+                result["edit_label_status"] = "password_omitted"
+            else:
+                result["title"] = (info.element.CurrentName or "")[:200]
+                result["edit_label_status"] = "included"
+        except Exception:
+            result["edit_label_status"] = "unavailable"
+    return result
+
+
 @uia_thread
-def inspect_application(executable: Path):
-    """Local diagnostic: no passwords, edit contents, command lines or session storage."""
+def inspect_application(executable: Path, *, include_edit_labels=False):
+    """Local diagnostic; edit labels are opt-in, values and passwords are never read."""
     if os.name != "nt":
         raise FlowError("Ejecuta el diagnóstico en Windows.")
+    executable = executable.resolve(strict=True)
+    if not executable.is_file() or executable.suffix.lower() != ".exe":
+        raise FlowError("Selecciona el archivo .exe de Userflex, no la carpeta de instalación.")
     import psutil
     from pywinauto import Desktop
-    executable = executable.resolve(strict=True)
     matches = []
     for process in psutil.process_iter(["pid", "exe", "name"]):
         try:
@@ -281,14 +301,21 @@ def inspect_application(executable: Path):
     for window in Desktop(backend="uia").windows():
         if window.process_id() not in pids:
             continue
+        descendants = window.descendants()
+        infos = [element.element_info for element in descendants[:400]]
+        positions = {info.runtime_id: index for index, info in enumerate(infos)}
         controls = []
-        for element in window.descendants()[:400]:
-            info = element.element_info
-            kind = info.control_type
-            # Only expose names of actionable, non-edit controls. Never Values.
-            title = info.name if kind in ("Button", "TabItem", "MenuItem", "ComboBox", "CheckBox") else ""
-            controls.append({"control_type": kind, "auto_id": info.automation_id,
-                             "title": title[:200], "framework_id": info.framework_id})
-        windows.append({"title": window.window_text()[:200], "pid": window.process_id(), "controls": controls})
-    return {"evidence": evidence, "windows": windows,
+        for index, info in enumerate(infos):
+            control = _diagnostic_control(info, include_edit_labels=include_edit_labels)
+            control["index"] = index
+            try:
+                parent = info.parent
+                control["parent_index"] = positions.get(parent.runtime_id) if parent else None
+            except Exception:
+                control["parent_index"] = None
+            controls.append(control)
+        windows.append({"title": window.window_text()[:200], "pid": window.process_id(),
+                        "controls": controls, "controls_truncated": len(descendants) > 400})
+    return {"executable": str(executable), "matched_processes": len(matches),
+            "edit_labels_included": include_edit_labels, "evidence": evidence, "windows": windows,
             "conclusion": "Indicios locales; app.asar sugiere Electron, un proceso msedgewebview2 sugiere WebView2. No prueban acceso CDP ni autorización contractual."}

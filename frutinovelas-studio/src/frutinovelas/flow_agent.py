@@ -332,16 +332,31 @@ def main(argv=None):
     parser.add_argument("command", choices=["serve", "inspect", "schema", "verify-profile", "resolve"])
     parser.add_argument("--profile", type=Path, default=flow_dir() / "profile.json")
     parser.add_argument("--executable", type=Path)
+    parser.add_argument("--output", type=Path, help="Guardar inspect/schema directamente como JSON UTF-8.")
+    parser.add_argument("--include-edit-labels", action="store_true",
+                        help="Incluir nombres accesibles de campos no secretos; vacía los campos antes de inspeccionar.")
     parser.add_argument("--job-id", type=UUID)
     parser.add_argument("--confirmed-no-remote-work", action="store_true")
     args = parser.parse_args(argv)
+    if args.output and args.command not in ("inspect", "schema"):
+        parser.error("--output solo se utiliza con inspect o schema.")
+    if args.include_edit_labels and args.command != "inspect":
+        parser.error("--include-edit-labels solo se utiliza con inspect.")
     try:
-        if args.command == "schema":
-            print(json.dumps(Profile.model_json_schema(), ensure_ascii=False, indent=2))
-        elif args.command == "inspect":
-            if not args.executable:
-                parser.error("inspect requiere --executable con la ruta exacta del programa autorizado.")
-            print(json.dumps(inspect_application(args.executable), ensure_ascii=False, indent=2))
+        if args.command in ("schema", "inspect"):
+            if args.command == "schema":
+                document = Profile.model_json_schema()
+            else:
+                if not args.executable:
+                    parser.error("inspect requiere --executable con la ruta exacta del programa autorizado.")
+                document = inspect_application(args.executable, include_edit_labels=args.include_edit_labels)
+            # Escaped JSON survives legacy PowerShell console code pages. Direct files use UTF-8.
+            serialized = json.dumps(document, ensure_ascii=args.output is None, indent=2) + "\n"
+            if args.output:
+                args.output.write_text(serialized, encoding="utf-8")
+                print("Diagnostico guardado en el archivo indicado.")
+            else:
+                print(serialized, end="")
         elif args.command == "resolve":
             if not args.job_id or not args.confirmed_no_remote_work:
                 parser.error("Comprueba el trabajo en Flow y usa --job-id y --confirmed-no-remote-work.")
