@@ -1,5 +1,17 @@
 # FRUTINOVELAS Studio
 
+## Cline + Colab + UserFlex + TikTok (integración local en pruebas)
+
+Cline puede usar el MCP local de Fruticap desde Windows mientras Qwen permanece
+en Colab mediante tu URL Cloudflare y API key privada. El navegador TikTok de
+Fruticap es **independiente** de My Content y de UserFlex; conserva su propio
+perfil y no publica sin autorización explícita. La automatización de UserFlex
+requiere verificar sus controles reales en tu instalación.
+
+Consulta la [guía de instalación y lista de verificación](docs/CLINE_TIKTOK_MCP.md)
+para VirtualBox, Cline, el inicio de sesión manual y las pruebas de aceptación.
+
+
 ## Flow Automation (en revisión)
 
 Flow es un proveedor adicional con cola persistente, aprobación de imágenes, historial
