@@ -54,14 +54,21 @@ router = APIRouter(prefix="/flow", tags=["Flow Automation"], dependencies=[Depen
 
 
 def agent_status():
-    client = FlowClient()
+    client = None
     try:
-        return client.request("GET", "status")
-    except (httpx.HTTPError, FlowError):
-        return {"available": False, "window_open": False, "flow_available": None, "authentication": "unknown",
-                "modes": {}, "detail": "Agente Windows no disponible. Inicia iniciar_flow_agente.cmd."}
+        client = FlowClient()
+        result = client.request("GET", "status")
+        required = {"available", "window_open", "flow_available", "authentication", "modes", "detail"}
+        if not isinstance(result, dict) or not required.issubset(result):
+            raise FlowError("Respuesta del agente incompleta.")
+        return {**result, "reachable": True}
+    except (httpx.HTTPError, FlowError, ValueError, OSError):
+        return {"reachable": False, "profile_configured": None, "available": False,
+                "window_open": None, "flow_available": None, "authentication": "unknown",
+                "modes": {}, "detail": "No se pudo consultar el agente Windows. Inicia iniciar_flow_agente.cmd en este equipo. Si ya está abierto, revisa su terminal y que use el mismo directorio de datos que Studio."}
     finally:
-        client.close()
+        if client is not None:
+            client.close()
 
 
 @router.get("/status")

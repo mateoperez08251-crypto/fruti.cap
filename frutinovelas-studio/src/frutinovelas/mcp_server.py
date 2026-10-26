@@ -15,7 +15,7 @@ from frutinovelas.mcp_studio import register_studio_tools
 from frutinovelas.prompts import H3Draft, ImageDraft, LintRequest, compile_h3, compile_image, lint_h3
 
 
-def create_server(*, include_flow: bool = False) -> MCPServer:
+def create_server(*, include_flow: bool = False, include_tiktok: bool = False) -> MCPServer:
     server = MCPServer(
         "FRUTINOVELAS Prompts",
         instructions=(
@@ -82,6 +82,9 @@ def create_server(*, include_flow: bool = False) -> MCPServer:
         from frutinovelas.mcp_flow import register_flow_tools
         register_flow_tools(server, annotations, ToolAnnotations(
             read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=True))
+    if include_tiktok:
+        from frutinovelas.mcp_tiktok import register_tiktok_tools
+        register_tiktok_tools(server)
     return server
 
 
@@ -146,7 +149,7 @@ def main(argv: list[str] | None = None) -> int:
         uvicorn.run(BearerMiddleware(app, settings.mcp_token), host=host, port=port, proxy_headers=False)
     else:
         # Public/unauthenticated test tunnels must never expose desktop automation.
-        server = create_server(include_flow=True) if args.transport == "stdio" else create_server()
+        server = create_server(include_flow=True, include_tiktok=True) if args.transport == "stdio" else create_server()
         server.run(transport=args.transport, **options)
     return 0
 

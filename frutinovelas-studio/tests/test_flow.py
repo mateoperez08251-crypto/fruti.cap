@@ -300,6 +300,63 @@ def test_no_auto_connect_or_provider_capabilities_are_fabricated(client, monkeyp
     assert client.post(PREFIX + "/connect", json={"mode": "assisted", "authorized": False}).status_code == 422
 
 
+@pytest.mark.parametrize("response", [None, {}, httpx.ConnectError("offline"), ValueError("invalid JSON")])
+def test_detection_explains_unreachable_agent_without_claiming_the_window_is_closed(client, monkeypatch, response):
+    from frutinovelas.routes import flow as routes
+    closed = []
+
+    class UnavailableAgent:
+        def request(self, *_):
+            if isinstance(response, Exception):
+                raise response
+            return response
+
+        def close(self):
+            closed.append(True)
+
+    monkeypatch.setattr(routes, "FlowClient", UnavailableAgent)
+    r = client.get(PREFIX + "/detect")
+    assert r.status_code == 200, r.text
+    assert r.json()["reachable"] is False
+    assert r.json()["window_open"] is None
+    assert "iniciar_flow_agente.cmd" in r.json()["detail"]
+    assert closed == [True]
+
+
+def test_detection_distinguishes_a_reachable_agent_without_profile(client, monkeypatch):
+    from frutinovelas.routes import flow as routes
+
+    class UnconfiguredAgent:
+        def request(self, *_):
+            return {"available": False, "window_open": None, "flow_available": None, "authentication": "unknown",
+                    "profile_configured": False, "modes": {}, "detail": "Falta configurar el perfil."}
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(routes, "FlowClient", UnconfiguredAgent)
+    for url in ("/detect", "/status"):
+        r = client.get(PREFIX + url)
+        assert r.status_code == 200
+        result = r.json()["agent"] if url == "/status" else r.json()
+        assert result["reachable"] is True
+        assert result["profile_configured"] is False
+        assert result["window_open"] is None
+
+
+def test_detection_handles_agent_credential_initialization_failure(client, monkeypatch):
+    from frutinovelas.routes import flow as routes
+
+    def unavailable_client():
+        raise FlowError("La credencial está ocupada.")
+
+    monkeypatch.setattr(routes, "FlowClient", unavailable_client)
+    r = client.get(PREFIX + "/detect")
+    assert r.status_code == 200
+    assert r.json()["reachable"] is False
+    assert r.json()["window_open"] is None
+
+
 def test_flow_lock_serializes_multiple_backend_processes(client):
     payload, _ = initial(client)
     with flow.operation_lock(), pytest.raises(FlowError):
