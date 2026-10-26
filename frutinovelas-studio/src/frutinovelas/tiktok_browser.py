@@ -14,6 +14,7 @@ import threading
 import time
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from pathlib import Path
 from uuid import UUID
 
@@ -49,18 +50,23 @@ def _dir() -> Path:
     return path
 
 
+@contextmanager
 def _db():
     conn = sqlite3.connect(_dir() / "jobs.sqlite3", timeout=15)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=15000")
-    conn.execute("PRAGMA synchronous=FULL")
-    conn.execute("""CREATE TABLE IF NOT EXISTS publications (
-        request_id TEXT PRIMARY KEY, render_id TEXT NOT NULL UNIQUE, fingerprint TEXT NOT NULL,
-        caption TEXT NOT NULL, state TEXT NOT NULL, error TEXT NOT NULL DEFAULT '',
-        created REAL NOT NULL, updated REAL NOT NULL
-    )""")
-    return conn
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=15000")
+        conn.execute("PRAGMA synchronous=FULL")
+        conn.execute("""CREATE TABLE IF NOT EXISTS publications (
+            request_id TEXT PRIMARY KEY, render_id TEXT NOT NULL UNIQUE, fingerprint TEXT NOT NULL,
+            caption TEXT NOT NULL, state TEXT NOT NULL, error TEXT NOT NULL DEFAULT '',
+            created REAL NOT NULL, updated REAL NOT NULL
+        )""")
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 def _public(row):
@@ -125,7 +131,10 @@ class TikTokBrowser:
         if self.context is not None:
             try:
                 if self.context.pages:
+                    self.page = self.context.pages[0] if self.page is None or self.page.is_closed() else self.page
                     return
+                self.page = self.context.new_page()
+                return
             except Exception:
                 pass
             self.context = None
@@ -298,8 +307,28 @@ class TikTokBrowser:
                 (request_id, render_id, fingerprint, caption, time.time(), time.time()),
             )
             db.commit()
-        self.executor.submit(self._publish, request_id, render_id, caption)
+        try:
+            self.executor.submit(self._publish, request_id, render_id, caption)
+        except RuntimeError as exc:
+            self._mark(request_id, "unknown", "El proceso de navegador está cerrado; verifica el trabajo.")
+            raise TikTokOperatorError("No se pudo iniciar el ejecutor de TikTok.") from exc
         return {"request_id": request_id, "render_id": render_id, "state": "queued"}
+
+    def reconcile(self, request_id, confirmed_not_published=False):
+        """Only a human who checked TikTok may release an uncertain publication."""
+        if confirmed_not_published is not True:
+            raise TikTokOperatorError("Debes comprobar en TikTok que el video NO se publicó.")
+        try:
+            request_id = str(UUID(request_id))
+        except ValueError as exc:
+            raise TikTokOperatorError("ID UUID no válido.") from exc
+        with _db() as db:
+            row = db.execute("SELECT * FROM publications WHERE request_id=?", (request_id,)).fetchone()
+            if row is None or row["state"] != "unknown":
+                raise TikTokOperatorError("Solo un trabajo incierto admite reconciliación.")
+            db.execute("UPDATE publications SET state='not_published',error='Sin publicación confirmado manualmente.',updated=? WHERE request_id=?",
+                       (time.time(), request_id))
+        return self.get_publication(request_id)
 
     def get_publication(self, request_id):
         try:
