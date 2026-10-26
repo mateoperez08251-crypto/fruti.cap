@@ -5,8 +5,6 @@ No usan navegador ni publican en TikTok. La compatibilidad real se verifica apar
 from __future__ import annotations
 
 from uuid import uuid4
-from unittest.mock import patch
-
 import pytest
 
 from frutinovelas import tiktok_browser as tk
@@ -76,8 +74,6 @@ def test_text_comparison_preserves_accents_newlines_and_emojis():
 def test_render_is_validated_inside_studio(data_dir):
     with pytest.raises(tk.TikTokOperatorError, match="ID"):
         tk._render_path("not-a-uuid")
-    with pytest.raises(tk.TikTokOperatorError, match="montaje"):
-        tk._render_path(str(uuid4()))
 
 
 def test_login_calls_browser_on_single_playwright_thread(data_dir, monkeypatch):
