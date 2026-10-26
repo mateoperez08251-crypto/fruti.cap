@@ -30,26 +30,28 @@ Este módulo no modifica ni importa nada del repositorio `my-content`.
 
    ```powershell
    uv sync --extra flow-agent --extra dev --frozen
-   uv pip install --python .venv/Scripts/python.exe playwright
    npm --prefix frontend ci
    npm --prefix frontend run build
    .\iniciar.cmd
+   # En otra terminal, DESPUÉS del último uv sync:
+   uv pip install --python .venv/Scripts/python.exe playwright
    ```
 
    Para preparar Chromium en caso de que Chrome no esté instalado: `uv run python -m playwright install chromium`.
    De forma predeterminada TikTok usa Google Chrome instalado (`channel="chrome"`).
 4. Mantén el programa abierto y comprueba `http://127.0.0.1:8765`. No intentes trasladar bases de datos/cookies de `my-content`.
 5. Abre **Cline** en VS Code dentro del mismo Windows y configura tu proveedor Qwen a la URL de Colab/Cloudflare como ya lo tienes, **sin agregar la API key a los archivos del repo**.
-6. En **Cline > MCP Servers > Configure**, añade un servidor local stdio (ajusta la ruta de `uv.exe`):
+6. En **Cline > MCP Servers > Configure**, añade este servidor stdio local,
+   sustituyendo las DOS rutas del ejemplo por la ruta real a tu copia y su Python:
 
    ```json
    {
      "mcpServers": {
        "fruticap-local": {
-         "command": "uv",
+         "command": "D:\\\\fruti.cap\\\\frutinovelas-studio\\\\.venv\\\\Scripts\\\\python.exe",
          "args": [
-           "--directory", "D:\\fruti.cap\\frutinovelas-studio",
-           "run", "--frozen", "frutinovelas-mcp", "--transport", "stdio"
+           "-m", "frutinovelas.mcp_server", "--transport", "stdio",
+           "--directory", "D:\\\\fruti.cap\\\\frutinovelas-studio"
          ],
          "disabled": false,
          "autoApprove": []
@@ -58,7 +60,12 @@ Este módulo no modifica ni importa nada del repositorio `my-content`.
    }
    ```
 
-   Cambia `D:\\fruti.cap\\frutinovelas-studio` por tu ruta real; no es una ruta detectada. Si Cline no localiza `uv`, reemplaza `command` con la ruta absoluta a `uv.exe`. Evita configurar el **mismo** MCP dos veces. Para las herramientas de escritorio y TikTok **usa stdio local**, no una URL HTTP expuesta.
+   Usa el Python de la misma `.venv`, sin ejecutar `uv run` desde Cline:
+   eso permite mantener instalado Playwright manualmente. Si ejecutas otro
+   `uv sync`, comprueba o reinstala Playwright. Evita duplicar el MCP.
+   Para las herramientas de escritorio y TikTok **usa stdio local**,
+   nunca una URL HTTP expuesta.
+
 7. Reinicia la conexión MCP de Cline y comprueba la presencia de `tiktok_browser_status`, `tiktok_open_manual_login`, `tiktok_publish_chapter`, `tiktok_get_publication` y `flow_detect_window`. El MCP de TikTok no debe aparecer en un endpoint HTTP público.
 
 ## Inicio de sesión y trabajo
