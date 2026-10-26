@@ -153,11 +153,15 @@ class TikTokBrowser:
         self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
         self._set_phase("open", "La autenticación debe completarla el usuario.")
 
-    def open_login(self):
+    def _open_login(self):
         self._ensure_browser()
         self.page.goto(UPLOAD_URL, wait_until="domcontentloaded", timeout=60000)
         self._set_phase("login", "Inicia sesión manualmente en TikTok y completa cualquier verificación.")
         return {"browser": "open", "message": "Ventana de TikTok abierta. Completa el inicio de sesión manualmente."}
+
+    def open_login(self):
+        # Playwright sync objects are thread-affine: reuse their owning thread.
+        return self.executor.submit(self._open_login).result(timeout=90)
 
     def _unique(self, loc, label):
         count = loc.count()
@@ -208,7 +212,10 @@ class TikTokBrowser:
             self._mark(request_id, "uploading")
             self.page.goto(UPLOAD_URL, wait_until="domcontentloaded", timeout=60000)
             self._check_login()
-            file_input = self._unique(self.page.locator('input[type="file"]'), "archivo de TikTok")
+            file_input = self.page.locator('input[type="file"][accept*="video"]')
+            if file_input.count() == 0:
+                file_input = self.page.locator('input[type="file"]')
+            file_input = self._unique(file_input, "archivo de TikTok")
             file_input.set_input_files(str(file_path), timeout=60000)
             editor = self._caption()
             editor.fill(caption, timeout=30000)
@@ -230,18 +237,31 @@ class TikTokBrowser:
             # Journal first: do not repeat a click whose outcome is uncertain.
             self._mark(request_id, "posting")
             clicked = True
-            post.click(timeout=15000, no_wait_after=True)
+            try:
+                post.click(timeout=15000, no_wait_after=True)
+            except Exception:
+                # The click may already have reached TikTok.
+                pass
             deadline = time.monotonic() + 180
+            confirmed_dialog = False
             while time.monotonic() < deadline:
                 self._check_login()
                 if self._success_messages() - previous:
                     self._mark(request_id, "published")
                     self._set_phase("open", "TikTok confirmó la publicación.")
                     return
+                # TikTok sometimes requires a single final "Post now" confirmation.
+                if not confirmed_dialog:
+                    dialogs = self.page.locator('[role="dialog"]:visible, dialog[open]:visible')
+                    if dialogs.count() == 1:
+                        confirm = dialogs.get_by_role("button", name=re.compile(r"^(publicar ahora|post now)$", re.I))
+                        if confirm.count() == 1 and confirm.is_enabled():
+                            confirmed_dialog = True
+                            confirm.click(timeout=15000, no_wait_after=True)
                 self.page.wait_for_timeout(1000)
             raise TikTokOperatorError("No llegó una confirmación inequívoca de TikTok.")
         except Exception as exc:
-            # A click could have succeeded despite a timeout or lost response.
+            # After a click could have reached TikTok, never auto-retry blindly.
             self._mark(request_id, "unknown" if clicked else "failed",
                        str(exc)[:500] if not clicked else "Resultado incierto: revisa tu TikTok antes de otro intento.")
             self._set_phase("error", "Revisa la publicación y el estado del navegador.")
