@@ -1,0 +1,55 @@
+# diccionario de credenciales para camaras IP
+# formato:  user:password   (o solo la password, se asume user=admin)
+# linea por linea, # = comentario
+
+# --- defaults universal
+admin:admin
+admin:12345
+admin:1234
+admin:admin123
+admin:password
+admin:changeme
+admin:123456
+admin:admin1
+admin:qwe123
+admin:1q2w3e
+root:root
+guest:guest
+
+# --- Hikvision
+admin:hikvision
+admin:12345!
+admin:abcd1234
+support:support321
+
+# --- Dahua
+admin:666666
+admin:888888
+admin:Dahua123
+admin:dahua666
+
+# --- Reolink
+admin:reolink
+admin:1234
+
+# --- TP-Link / VIGI
+admin:admin1234
+admin:vigi123
+admin:88888888
+admin:111111
+admin:abcd1234
+
+# --- Axis
+axis:axis
+root:pass
+admin:pass123
+
+# --- generico / JC / VGA / miniDVR
+admin:camera
+admin:000000
+admin:a123456
+admin:root
+admin:secret
+admin:1111
+cam:cam
+user:1234
