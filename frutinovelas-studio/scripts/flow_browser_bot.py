@@ -33,6 +33,7 @@ from pathlib import Path
 try:
     from scripts import flow_mycontent_browser as bridge
 except ModuleNotFoundError:  # Executed as a plain script by My Content's Python.
+    # pyrefly: ignore[missing-import]
     import flow_mycontent_browser as bridge
 
 BEFORE_SEND = ("claimed", "project_ready", "preparing", "configured")
@@ -55,7 +56,20 @@ class StudioAPI:
         # Loopback only: proxies from the environment must not see the bot key.
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
-    def _send(self, path, data=None, content_type="application/json"):
+    BUSY = "procesando otra operación"
+
+    def _send(self, path, data=None, content_type="application/json", attempts=20, wait=1.5):
+        # Studio's queue lock is taken briefly by its worker. A 409 for that lock is raised
+        # before any state change, so retrying the same request is safe and bounded.
+        for attempt in range(attempts):
+            try:
+                return self._send_once(path, data, content_type)
+            except RuntimeError as error:
+                if self.BUSY not in str(error) or attempt == attempts - 1:
+                    raise
+                time.sleep(wait)
+
+    def _send_once(self, path, data, content_type):
         request = urllib.request.Request(self.base + path, data=data, method="POST",
                                          headers={"X-Fruti-Flow-Bot": self.key, "Content-Type": content_type})
         try:
@@ -120,8 +134,12 @@ def write_references(job, folder):
 
 
 def same_text(typed, expected):
+    # Flow's editor renders paragraphs as blocks, so inner_text may report a different
+    # number of line breaks. Only newline runs and NBSP are normalised; every other
+    # character, including tildes, must be identical.
     def normalize(value):
-        return value.replace("\r\n", "\n").replace("\r", "\n").strip()
+        value = value.replace("\u00a0", " ").replace("\r\n", "\n").replace("\r", "\n")
+        return re.sub(r"[ \t]*\n[\n \t]*", "\n", value).strip()
     return normalize(typed) == normalize(expected)
 
 
@@ -149,10 +167,14 @@ def submit(api, journal, page, job, workdir):
         journal.save(job_id, state)
         page.write_prompt(job["prompt"])
     except Exception as error:  # Nothing was sent: provably safe to release.
+        if hasattr(page, "_diagnose"):
+            page._diagnose(f"stopped: {str(error)[:200]}")
         state.update(state="stopped", error=str(error))
         journal.save(job_id, state)
         api.event(job_id, "not_submitted", f"No se envió: {error}")
         return "not_submitted"
+    if hasattr(page, "_diagnose"):
+        page._diagnose("before_send")  # Evidence of references, settings and prompt.
     state["state"] = "sending"
     journal.save(job_id, state)
     try:
@@ -227,11 +249,34 @@ def run_once(api, journal, page_factory, workdir):
 # --- Playwright page (observed English Flow UI) -------------------------------------
 
 class FlowPage:
-    def __init__(self, page, timeout=600, video_enabled=False):
+    def __init__(self, page, timeout=600, video_enabled=False, diagnostics=None):
         self.page, self.timeout, self.video_enabled = page, timeout, video_enabled
+        self.diagnostics = Path(diagnostics) if diagnostics else None
 
-    def _one(self, locator, what):
+    def _diagnose(self, what):
+        """Keep evidence of what Flow showed when a control was missing (outside Git)."""
+        if not self.diagnostics:
+            return
+        try:
+            self.diagnostics.mkdir(parents=True, exist_ok=True)
+            stamp = time.strftime("%Y%m%d-%H%M%S")
+            self.page.screenshot(path=str(self.diagnostics / f"{stamp}.png"), full_page=False)
+            buttons = self.page.get_by_role("button")
+            names = [buttons.nth(i).get_attribute("aria-label") or buttons.nth(i).inner_text()[:80]
+                     for i in range(min(buttons.count(), 80))]
+            (self.diagnostics / f"{stamp}.json").write_text(json.dumps(
+                {"missing": what, "url": self.page.url, "title": self.page.title(), "buttons": names},
+                ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception:  # Diagnostics must never turn a clean stop into another failure.
+            pass
+
+    def _one(self, locator, what, wait=20000):
+        try:
+            locator.first.wait_for(state="visible", timeout=wait)
+        except Exception:
+            pass
         if locator.count() != 1:
+            self._diagnose(what)
             raise ControlsMissing(f"No se encontró un control único: {what}.")
         return locator
 
@@ -243,10 +288,12 @@ class FlowPage:
             self._one(self.page.get_by_role("button", name="New project", exact=True), "New project").click()
             self.page.wait_for_url("**/project/**", timeout=45000)
         if not self.page.url.startswith("https://flow.google.com/project/"):
+            self._diagnose("project")
             raise ControlsMissing("No se abrió un proyecto de Flow.")
         return self.page.url
 
     def attach(self, references):
+        # pyrefly: ignore[missing-import]
         from playwright.sync_api import expect
         for reference in references:
             self._one(self.page.get_by_role("button", name="Add ingredients to the prompt box", exact=True),
@@ -254,18 +301,34 @@ class FlowPage:
             with self.page.expect_file_chooser() as chooser:
                 self._one(self.page.get_by_role("button", name="Upload media", exact=True), "Upload media").click()
             chooser.value.set_files(str(reference))
-            option = self.page.get_by_role("option").filter(has_text=Path(reference).name)
+            # The file name carries the SHA prefix, so duplicates in a reused project are the same file.
+            option = self.page.get_by_role("option").filter(has_text=Path(reference).name).first
             expect(option).to_be_enabled(timeout=60000)
             option.click()
+            self.dismiss_overlays()
+
+    def dismiss_overlays(self):
+        """Close pickers/menus left open; their backdrop intercepts the next click."""
+        backdrop = self.page.locator(".cdk-overlay-backdrop-showing")
+        for _ in range(4):
+            if not backdrop.count():
+                return
+            self.page.keyboard.press("Escape")
+            self.page.wait_for_timeout(400)
+        if backdrop.count():
+            self._diagnose("overlay")
+            raise ControlsMissing("Un panel de Flow sigue abierto y bloquea los controles.")
 
     def configure(self, job):
         if job["kind"] == "video" and not self.video_enabled:
             # Frames mode and video labels have not been verified in a real run yet.
             raise ControlsMissing("Video desde imagen aún no verificado en Flow real; usa --enable-video tras comprobarlo.")
+        # pyrefly: ignore[missing-import]
         from playwright.sync_api import expect
         close = self.page.get_by_role("button", name="Close", exact=True)
         if close.count() == 1 and close.is_visible():
             close.click()
+        self.dismiss_overlays()
         agent = self._one(self.page.get_by_role("button", name="Agent", exact=True), "Agent")
         if agent.get_attribute("aria-pressed") == "true":
             agent.click()  # Agent mode would rewrite the literal prompt.
@@ -298,7 +361,12 @@ class FlowPage:
     def write_prompt(self, prompt):
         editor = self._one(self.page.get_by_role("textbox", name="What do you want to create?", exact=True), "prompt")
         editor.fill(prompt)
-        if not same_text(editor.inner_text(), prompt):
+        typed = editor.inner_text()
+        if not same_text(typed, prompt):
+            if self.diagnostics:
+                self.diagnostics.mkdir(parents=True, exist_ok=True)
+                (self.diagnostics / (time.strftime("%Y%m%d-%H%M%S") + "-prompt.json")).write_text(
+                    json.dumps({"expected": prompt, "typed": typed}, ensure_ascii=False, indent=2), encoding="utf-8")
             raise ControlsMissing("Flow alteró el texto del prompt.")
         self._one(self.page.get_by_role("button", name="Start generation", exact=True), "Start generation")
 
@@ -350,6 +418,7 @@ def main(argv=None):
     try:
         from scripts.flow_image_job import download_browser
     except ModuleNotFoundError:
+        # pyrefly: ignore[missing-import]
         from flow_image_job import download_browser
     from contextlib import contextmanager
 
@@ -370,7 +439,7 @@ def main(argv=None):
         with download_browser(browser, manifest) as context:
             page = context.new_page()
             try:
-                yield FlowPage(page, video_enabled=args.enable_video)
+                yield FlowPage(page, video_enabled=args.enable_video, diagnostics=root / "bot_diagnostics")
             finally:
                 page.close()
 

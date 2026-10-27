@@ -15,7 +15,7 @@ if not exist "%~dp0.venv\Scripts\python.exe" (
   exit /b 1
 )
 rem La credencial se pasa solo por el entorno de este proceso; no se escribe en disco.
-for /f "usebackq delims=" %%K in (`"%~dp0.venv\Scripts\python.exe" -c "from frutinovelas.services.flow_transport import local_secret; print(local_secret('browser'))"`) do set "FRUTI_FLOW_BOT_KEY=%%K"
+for /f "usebackq delims=" %%K in (`""%~dp0.venv\Scripts\python.exe" "%~dp0scripts\flow_bot_key.py""`) do set "FRUTI_FLOW_BOT_KEY=%%K"
 if not defined FRUTI_FLOW_BOT_KEY (
   echo No se pudo preparar la credencial local del bot.
   pause
