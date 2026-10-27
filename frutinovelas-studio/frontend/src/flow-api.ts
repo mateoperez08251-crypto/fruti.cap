@@ -1,6 +1,6 @@
 import { request } from './api'
 
-export type FlowMode = 'assisted' | 'uia'
+export type FlowMode = 'assisted' | 'uia' | 'browser'
 export type FlowAgentStatus = {
   reachable?: boolean; profile_configured?: boolean | null; window_title?: string | null
   available: boolean; window_open: boolean | null; flow_available: boolean | null; authentication: string

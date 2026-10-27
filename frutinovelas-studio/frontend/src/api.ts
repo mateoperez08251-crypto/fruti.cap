@@ -16,6 +16,7 @@ export type NarratedShot = {
   flow_scene_id?: string | null
   flow_image_job_id?: string | null
   flow_video_job_id?: string | null
+  selected_image_job_id?: string | null
 }
 export type NarratedVideo = {
   id: string
@@ -40,7 +41,7 @@ export type NarratedPlanRequest = {
 export type NarratedFlowRequest = {
   expected_revision: number; automatic_approval: boolean; clip_seconds: number; request_id: string
 }
-export type NarratedFlowJobStatus = { shot: number; kind: string; id: string; state: string; error: string }
+export type NarratedFlowJobStatus = { shot: number | null; kind: string; id: string; state: string; error: string; result_asset_id?: string | null; result_url?: string | null; created_at?: string }
 export type NarratedFlowResult = { video: NarratedVideo; jobs: NarratedFlowJobStatus[] }
 export type NarratedRendererStatus = { configured: boolean; url: string }
 
@@ -261,8 +262,8 @@ export const api = {
     request<NarratedVideo>('/projects/' + projectId + '/narrated-videos', json('POST', data)),
   updateNarratedVideo: (id: string, data: { expected_revision: number; title?: string; transcript?: string; shots?: NarratedShot[]; aspect_ratio?: '9:16' | '16:9' }) =>
     request<NarratedVideo>('/narrated-videos/' + id, json('PATCH', data)),
-  renderNarratedVideo: (id: string, expected_revision: number) =>
-    request<NarratedVideo>('/narrated-videos/' + id + '/render', json('POST', { expected_revision })),
+  renderNarratedVideo: (id: string, expected_revision: number, engine: 'auto' | 'local' | 'remote' = 'auto') =>
+    request<NarratedVideo & { engine?: string }>('/narrated-videos/' + id + '/render', json('POST', { expected_revision, engine })),
   planNarratedVideo: (id: string, data: NarratedPlanRequest) =>
     request<NarratedVideo>('/narrated-videos/' + id + '/plan', json('POST', data)),
   sendNarratedFlow: (id: string, data: NarratedFlowRequest) =>
@@ -271,6 +272,10 @@ export const api = {
     request<NarratedFlowResult>('/narrated-videos/' + id + '/flow/animate', json('POST', data)),
   syncNarratedFlow: (id: string, expected_revision: number) =>
     request<NarratedFlowResult>('/narrated-videos/' + id + '/flow/sync', json('POST', { expected_revision })),
+  narratedShotVersions: (id: string, shotIndex: number) =>
+    request<NarratedFlowJobStatus[]>(`/narrated-videos/${id}/shots/${shotIndex}/versions`),
+  selectNarratedVersion: (id: string, expected_revision: number, shot_index: number, job_id: string | null) =>
+    request<NarratedFlowResult>('/narrated-videos/' + id + '/select-version', json('POST', { expected_revision, shot_index, job_id })),
   narratedRenderer: () => request<NarratedRendererStatus>('/narrated-renderer'),
   connectNarratedRenderer: (url: string, token: string) =>
     request<NarratedRendererStatus>('/narrated-renderer', json('POST', { url, token })),

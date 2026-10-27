@@ -97,6 +97,9 @@ export function FlowResult({ job, scene, refresh }: { job: FlowJob; scene?: Scen
   </article>
 }
 
+// Clip lengths observed in Flow (Omni 1.1 Flash). Studio rejects others; it never rounds.
+const BROWSER_VIDEO_SECONDS = [4, 6, 8, 10]
+
 function FlowChapter({ projectId, chapterId, connected, mode, durations }: { projectId: string; chapterId: string; connected: boolean; mode: FlowMode; durations: number[] }) {
   const qc = useQueryClient()
   const toast = useToast()
@@ -135,7 +138,7 @@ function FlowChapter({ projectId, chapterId, connected, mode, durations }: { pro
           <option value="image">Imágenes</option><option value="video">Videos desde imágenes iniciales</option><option value="image_video">Imágenes y después animarlas</option>
         </select></div>
         {generationMode !== 'image' && <div className="field"><label htmlFor="flow-duration">Duración solicitada</label>
-          {mode === 'uia' ? <select id="flow-duration" className="input" value={duration} onChange={e => setDuration(e.target.value)}><option value="">Duración guardada por escena</option>{durations.map(d => <option key={d} value={d}>{d} segundos</option>)}</select>
+          {mode === 'uia' || mode === 'browser' ? <select id="flow-duration" className="input" value={duration} onChange={e => setDuration(e.target.value)}><option value="">Duración guardada por escena</option>{durations.map(d => <option key={d} value={d}>{d} segundos</option>)}</select>
             : <input id="flow-duration" className="input" type="number" min="1" max="60" value={duration} onChange={e => setDuration(e.target.value)} placeholder="Duración guardada por escena" />}
           <span className="hint">Solo se envían opciones compatibles con el perfil verificado. En modo asistido, compruébalas en Flow.</span>
         </div>}
@@ -193,7 +196,7 @@ export function FlowPage() {
   return <div className="page flow-page">
     <header className="page-head"><div><div className="eyebrow">PROVEEDOR ADICIONAL</div><h1>Flow Automation</h1><p className="muted">Imágenes, revisión y animación por escena.</p></div></header>
     <section className="card flow-section">
-      <div className="row flow-between"><h2><PlugZap size={20} /> Conexión</h2><span className="flow-state">{status.data?.connected ? `Conectado · ${status.data.mode === 'uia' ? 'Control Windows' : 'Modo asistido'}` : 'Desconectado'}</span></div>
+      <div className="row flow-between"><h2><PlugZap size={20} /> Conexión</h2><span className="flow-state">{status.data?.connected ? `Conectado · ${status.data.mode === 'uia' ? 'Control Windows' : status.data.mode === 'browser' ? 'Bot Chromium (My Content)' : 'Modo asistido'}` : 'Desconectado'}</span></div>
       <div className="notice" role={detectionError && !detection.isPending ? 'alert' : 'status'} aria-label="Resultado de detección" aria-busy={detection.isPending}>
         <div><strong>{message.title}</strong><p>{message.next}</p>
           {!detection.isPending && !detectionError && agent && <>
@@ -205,7 +208,7 @@ export function FlowPage() {
       </div>
       {!detection.isPending && agent && <p className="hint">Ventana: {agent.window_open == null ? 'sin comprobar' : agent.window_open ? 'abierta' : 'sin identificar'} · Flow: {agent.flow_available == null ? 'sin verificar' : agent.flow_available ? 'detectado' : 'sin detectar'} · Sesión: {agent.authentication === 'verified_by_control' ? 'verificada por control accesible' : 'sin verificar'}</p>}
       <div className="field"><label htmlFor="flow-mode">Controlador</label><select id="flow-mode" className="input" disabled={status.data?.connected} value={status.data?.connected ? status.data.mode : mode} onChange={e => setMode(e.target.value as FlowMode)}>
-        <option value="assisted">Asistido: generar en Flow e importar la descarga</option><option value="uia">Windows UIA: requiere perfil local verificado</option>
+        <option value="assisted">Asistido: generar en Flow e importar la descarga</option><option value="browser">Navegador: bot Chromium de My Content (iniciar_flow_bot.cmd)</option><option value="uia">Windows UIA: requiere perfil local verificado</option>
       </select></div>
       {!status.data?.connected && <label className="flow-check"><input type="checkbox" checked={authorized} onChange={e => setAuthorized(e.target.checked)} /> Tengo autorización para usar este controlador con mi sesión.</label>}
       <div className="row"><button className="btn btn-primary" disabled={connect.isPending || (!status.data?.connected && !authorized)} onClick={() => connect.mutate()}>{status.data?.connected ? 'Desconectar y pausar cola' : 'Conectar'}</button>
@@ -219,6 +222,6 @@ export function FlowPage() {
       <div className="field"><label htmlFor="flow-chapter">Capítulo</label><select id="flow-chapter" className="input" value={chapterId} disabled={!projectId} onChange={e => setParams({ project_id: projectId, chapter_id: e.target.value })}><option value="">Selecciona un capítulo</option>{chapters.data?.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}</select></div>
     </section>
     {projectId && chapterId && <FlowChapter key={`${projectId}:${chapterId}`} projectId={projectId} chapterId={chapterId}
-      connected={!!status.data?.connected} mode={status.data?.mode ?? mode} durations={status.data?.agent.modes.video?.durations ?? []} />}
+      connected={!!status.data?.connected} mode={status.data?.mode ?? mode} durations={(status.data?.mode ?? mode) === 'browser' ? BROWSER_VIDEO_SECONDS : status.data?.agent.modes.video?.durations ?? []} />}
   </div>
 }

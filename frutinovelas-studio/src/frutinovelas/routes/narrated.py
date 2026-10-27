@@ -282,7 +282,9 @@ def _flow_error(session, exc):
 
 def _with_jobs(session, row, jobs):
     session.refresh(row)
-    return {"video": _out(session, row), "jobs": [flow.public_job(j) for j in jobs]}
+    scenes_index = {shot.get("flow_scene_id"): i for i, shot in enumerate(row.shots) if shot.get("flow_scene_id")}
+    return {"video": _out(session, row),
+            "jobs": [{**flow.public_job(j), "shot": scenes_index.get(j.scene_id)} for j in jobs]}
 
 
 @router.post("/narrated-videos/{id}/plan")
