@@ -178,9 +178,19 @@ def submit(api, journal, page, job, workdir):
     state["state"] = "sending"
     journal.save(job_id, state)
     try:
-        page.start_generation()
+        accepted = page.start_generation()
     except Exception as error:
         api.event(job_id, "uncertain", f"Clic de envío sin confirmar: {error}")
+        return "uncertain"
+    if accepted is False:
+        # The click happened but Flow showed no sign of accepting it. It may still have
+        # been received, so this is never released or resent automatically.
+        if hasattr(page, "_diagnose"):
+            page._diagnose("after_send_unconfirmed")
+        state["state"] = "unconfirmed"
+        journal.save(job_id, state)
+        api.event(job_id, "uncertain", "Flow no mostró señal de aceptar el envío (la caja no se vació ni apareció "
+                  "una tarjeta nueva). Revisa el proyecto antes de liberar o reintentar.")
         return "uncertain"
     state["state"] = "submitted"
     journal.save(job_id, state)
@@ -281,7 +291,9 @@ class FlowPage:
         return locator
 
     def open_project(self, url):
-        if url:
+        if url and self.page.url.split("?")[0].rstrip("/") == url.split("?")[0].rstrip("/"):
+            pass  # Already open: reloading right after a click can abort the request.
+        elif url:
             self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
         else:
             self.page.goto(bridge.FLOW_URL, wait_until="domcontentloaded", timeout=60000)
@@ -358,9 +370,17 @@ class FlowPage:
         tiles = self._tiles(kind)
         return {tiles.nth(i).get_attribute("src") or "" for i in range(tiles.count())}
 
+    def _editor(self):
+        return self.page.get_by_role("textbox", name="What do you want to create?", exact=True)
+
     def write_prompt(self, prompt):
-        editor = self._one(self.page.get_by_role("textbox", name="What do you want to create?", exact=True), "prompt")
+        editor = self._one(self._editor(), "prompt")
         editor.fill(prompt)
+        # fill() sets the DOM text without key events; a real keystroke at the end makes
+        # Flow's editor register the content (otherwise its internal prompt may stay empty).
+        editor.press("Control+End")
+        self.page.keyboard.type(" ")
+        self.page.keyboard.press("Backspace")
         typed = editor.inner_text()
         if not same_text(typed, prompt):
             if self.diagnostics:
@@ -368,10 +388,23 @@ class FlowPage:
                 (self.diagnostics / (time.strftime("%Y%m%d-%H%M%S") + "-prompt.json")).write_text(
                     json.dumps({"expected": prompt, "typed": typed}, ensure_ascii=False, indent=2), encoding="utf-8")
             raise ControlsMissing("Flow alteró el texto del prompt.")
-        self._one(self.page.get_by_role("button", name="Start generation", exact=True), "Start generation")
+        button = self._one(self.page.get_by_role("button", name="Start generation", exact=True), "Start generation")
+        if not button.is_enabled():
+            raise ControlsMissing("El botón de generar está desactivado; Flow no registró el prompt.")
 
-    def start_generation(self):
+    def start_generation(self, wait=20):
+        """Click once and return whether Flow visibly accepted the request."""
+        before = self.page.locator("img, video").count()
         self.page.get_by_role("button", name="Start generation", exact=True).click()
+        deadline = time.monotonic() + wait
+        while time.monotonic() < deadline:
+            self.page.wait_for_timeout(1000)
+            editor = self._editor()
+            if editor.count() == 1 and not editor.inner_text().strip():
+                return True  # Flow clears the prompt box when it takes the request.
+            if self.page.locator("img, video").count() > before:
+                return True  # A new placeholder/progress tile appeared.
+        return False
 
     def wait_new_result(self, kind, known, timeout=None):
         deadline = time.monotonic() + (timeout or self.timeout)
