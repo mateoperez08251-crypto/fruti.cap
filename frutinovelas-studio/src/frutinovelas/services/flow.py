@@ -84,7 +84,8 @@ def _reference(session, asset_id):
     return {"asset_id": asset.id, "sha256": asset.sha256}
 
 
-def enqueue_plan(session, plan):
+def enqueue_plan(session, plan, commit=True, project_key=None):
+    """Queue Flow jobs. ``project_key`` names the story: same key, same Flow project."""
     spec = plan.model_dump(mode="json")
     fid = fingerprint(spec)
     request_id = str(plan.request_id)
@@ -130,7 +131,12 @@ def enqueue_plan(session, plan):
             if kind == "video" and any(x in prompt for x in ("<video>", "<audio>", "<Audio ", "[Video", "<Video")) and UUID(scene.id) not in overrides:
                 raise FlowError("Prepara un prompt de Flow en lenguaje natural; conserva el H3 original en Studio.")
             refs = []
-            if kind == "image":
+            explicit = plan.references.get(UUID(scene.id))
+            if kind == "image" and explicit is not None:
+                if len(set(explicit)) != len(explicit):
+                    raise FlowError("No repitas la misma imagen de referencia.")
+                refs = [_reference(session, str(asset_id)) for asset_id in explicit]
+            elif kind == "image":
                 refs = [_reference(session, c["asset_id"]) for c in rev.parameters.get("cast", [])]
             elif plan.generation_mode != "image_video":
                 if not rev.start_asset_id:
@@ -142,7 +148,9 @@ def enqueue_plan(session, plan):
                         "revision_number": rev.number, "original_prompt": original, "prompt": prompt,
                         "image_prompt": rev.parameters.get("image_prompt", ""), "animation_prompt": rev.prompt,
                         "references": refs, "cast": copy.deepcopy(rev.parameters.get("cast", [])),
-                        "aspect_ratio": project.aspect_ratio,
+                        "aspect_ratio": plan.aspect_ratio or project.aspect_ratio,
+                        "flow_tool": plan.flow_tool,
+                        "flow_project_key": project_key or chapter.id,
                         "duration_seconds": (plan.duration_seconds or rev.duration_seconds) if kind == "video" else None,
                         "automatic_approval": plan.automatic_approval, "mode": connection.mode,
                         "agent_id": connection.agent_id, "use_provider_audio_in_montage": False}
@@ -157,7 +165,10 @@ def enqueue_plan(session, plan):
     session.flush()
     session.add_all(output)
     scenes.audit(session, "flow.queued", "flow_batch", request_id, count=len(output))
-    session.commit()
+    if commit:
+        session.commit()
+    else:
+        session.flush()
     return output
 
 
@@ -287,4 +298,6 @@ def agent_payload(session, job):
         references.append({"content_base64": base64.b64encode(raw).decode(), "sha256": ref["sha256"]})
     return {"request_id": job.id, "kind": job.kind, "prompt": job.snapshot["prompt"],
             "aspect_ratio": job.snapshot["aspect_ratio"], "duration_seconds": job.snapshot["duration_seconds"],
+            "flow_tool": job.snapshot.get("flow_tool", "standard"),
+            "flow_project_key": job.snapshot.get("flow_project_key", job.chapter_id),
             "references": references, "expected_agent_id": job.snapshot["agent_id"]}

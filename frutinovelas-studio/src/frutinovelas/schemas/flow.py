@@ -18,6 +18,11 @@ class FlowPlan(BaseModel):
     prompts: dict[UUID, str] = Field(default_factory=dict)
     video_prompts: dict[UUID, str] = Field(default_factory=dict)
     duration_seconds: float | None = Field(default=None, gt=0, le=60)
+    # Registered image IDs per scene. When present they replace the cast references
+    # for that scene's image; the saved scene is not modified.
+    references: dict[UUID, list[UUID]] = Field(default_factory=dict)
+    aspect_ratio: Literal["9:16", "16:9", "1:1", "4:3", "3:4"] | None = None
+    flow_tool: Literal["standard", "storyboard_studio"] = "standard"
 
 
 class FlowReview(BaseModel):
@@ -28,7 +33,7 @@ class FlowReview(BaseModel):
 
 class FlowConnect(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    mode: Literal["assisted", "uia"] = "assisted"
+    mode: Literal["assisted", "uia", "browser"] = "assisted"
     authorized: bool = False
 
 
