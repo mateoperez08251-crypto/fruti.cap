@@ -178,7 +178,7 @@ def submit(api, journal, page, job, workdir):
     state["state"] = "sending"
     journal.save(job_id, state)
     try:
-        accepted = page.start_generation()
+        accepted = page.start_generation(kind=job["kind"], aspect=job.get("aspect_ratio"))
     except Exception as error:
         api.event(job_id, "uncertain", f"Clic de envío sin confirmar: {error}")
         return "uncertain"
@@ -193,6 +193,9 @@ def submit(api, journal, page, job, workdir):
                   "una tarjeta nueva). Revisa el proyecto antes de liberar o reintentar.")
         return "uncertain"
     state["state"] = "submitted"
+    if isinstance(accepted, set):
+        # Inventory taken right before the click, after uploads finished processing.
+        state["known_results"] = sorted(set(state.get("known_results", [])) | accepted)
     journal.save(job_id, state)
     api.event(job_id, "submitted")
     return recover(api, journal, page, job, workdir)
@@ -206,7 +209,8 @@ def recover(api, journal, page, job, workdir, timeout=None):
         return "uncertain"
     if state["state"] == "submitted":
         page.open_project(state["project_url"])
-        handle = page.wait_new_result(job["kind"], set(state.get("known_results", [])), timeout)
+        handle = page.wait_new_result(job["kind"], set(state.get("known_results", [])), timeout,
+                                      aspect=job.get("aspect_ratio"))
         if handle is None:
             return "waiting"  # Still generating: try again later, never resubmit.
         api.event(job_id, "downloading")
@@ -392,32 +396,50 @@ class FlowPage:
         if not button.is_enabled():
             raise ControlsMissing("El botón de generar está desactivado; Flow no registró el prompt.")
 
-    def start_generation(self, wait=20):
-        """Click once and return whether Flow visibly accepted the request."""
-        before = self.page.locator("img, video").count()
+    @staticmethod
+    def _ratio_ok(tile, kind, aspect):
+        """Uploads (e.g. a landscape reference) must never pass for a 9:16 result."""
+        if not aspect:
+            return True
+        size = tile.evaluate("e=>[e.videoWidth||e.naturalWidth||0, e.videoHeight||e.naturalHeight||0]")
+        width, height = size
+        if not width or not height:
+            return False
+        w, h = (int(x) for x in aspect.split(":"))
+        return abs(width / height - w / h) <= 0.03
+
+    def start_generation(self, wait=30, kind="image", aspect=None):
+        """Click once; return the pre-click inventory if Flow visibly accepted, else False."""
+        known = self.results(kind)
         self.page.get_by_role("button", name="Start generation", exact=True).click()
         deadline = time.monotonic() + wait
         while time.monotonic() < deadline:
             self.page.wait_for_timeout(1000)
             editor = self._editor()
             if editor.count() == 1 and not editor.inner_text().strip():
-                return True  # Flow clears the prompt box when it takes the request.
-            if self.page.locator("img, video").count() > before:
-                return True  # A new placeholder/progress tile appeared.
+                return known  # Flow clears the prompt box when it takes the request.
+            if self._new_tile(kind, known, aspect) is not None:
+                return known
         return False
 
-    def wait_new_result(self, kind, known, timeout=None):
+    def _new_tile(self, kind, known, aspect):
+        tiles = self._tiles(kind)
+        for i in range(tiles.count()):
+            tile = tiles.nth(i)
+            source = tile.get_attribute("src") or ""
+            if not source or source in known:
+                continue
+            ready = "e=>e.readyState>=3" if kind == "video" else "e=>e.complete && e.naturalWidth>0"
+            if tile.evaluate(ready) and self._ratio_ok(tile, kind, aspect):
+                return tile
+        return None
+
+    def wait_new_result(self, kind, known, timeout=None, aspect=None):
         deadline = time.monotonic() + (timeout or self.timeout)
         while time.monotonic() < deadline:
-            tiles = self._tiles(kind)
-            for i in range(tiles.count()):
-                tile = tiles.nth(i)
-                source = tile.get_attribute("src") or ""
-                if not source or source in known:
-                    continue
-                ready = "e=>e.readyState>=3" if kind == "video" else "e=>e.complete && e.naturalWidth>0"
-                if tile.evaluate(ready):
-                    return tile
+            tile = self._new_tile(kind, known, aspect)
+            if tile is not None:
+                return tile
             self.page.wait_for_timeout(2000)
         return None
 

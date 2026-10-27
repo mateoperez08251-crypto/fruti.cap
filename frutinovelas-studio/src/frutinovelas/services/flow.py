@@ -247,9 +247,21 @@ def cancel(session, job):
     return job
 
 
+BROWSER_RESOLVE_GRACE_SECONDS = 20 * 60
+
+
 def resolve(session, job, confirmed, note):
     if not confirmed or job.state not in (*REMOTE, "awaiting_import", "cancelled"):
         raise FlowError("Comprueba en Flow que el trabajo ya no está activo antes de liberar la reserva.")
+    if job.snapshot.get("mode") == "browser" and job.state in ("running", "downloading", "cancel_requested"):
+        # A confirmed click can take minutes to show a tile. Releasing it early caused a
+        # second real submission, so the bot must reconcile first or the grace must pass.
+        changed = job.updated_at.replace(tzinfo=None) if job.updated_at else None
+        elapsed = (utcnow().replace(tzinfo=None) - changed).total_seconds() if changed else 0
+        if elapsed < BROWSER_RESOLVE_GRACE_SECONDS:
+            minutes = int((BROWSER_RESOLVE_GRACE_SECONDS - elapsed) // 60) + 1
+            raise FlowError("El bot confirmó este envío y Flow puede tardar en mostrar el resultado. "
+                            f"Deja que el bot lo concilie o espera {minutes} min antes de liberarlo.")
     change(session, job, "cancelled", "Cierre verificado manualmente por el usuario.", remote_stopped=True, cancel_requested=True)
     scenes.audit(session, "flow.resolved", "flow_job", job.id, note=note)
     for child in session.scalars(select(FlowJob).where(FlowJob.dependency_id == job.id, FlowJob.state == "awaiting_approval")):

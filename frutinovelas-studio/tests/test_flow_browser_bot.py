@@ -113,10 +113,10 @@ class FakePage:
         self._step("prompt")
         self.prompt = prompt
 
-    def start_generation(self):
+    def start_generation(self, **_):
         self._step("start")
 
-    def wait_new_result(self, kind, known, timeout=None):
+    def wait_new_result(self, kind, known, timeout=None, **_):
         self.calls.append(("wait", tuple(sorted(known))))
         return None if self.result is None else "new"
 
@@ -371,4 +371,26 @@ def test_real_page_refuses_unverified_video_before_touching_flow_and_compares_ne
     with pytest.raises(bot.ControlsMissing):
         bot.FlowPage(object()).configure({"kind": "video"})
     assert bot.same_text(" Fruta\nsol ", " Fruta\r\nsol\r\n")
+    assert bot.same_text("Estilo.\nEscena", "Estilo.\n\nEscena")  # Flow's paragraph blocks.
     assert not bot.same_text("Fruta", "Fruta madura")
+    assert not bot.same_text("Canción", "Cancion")
+
+
+def test_confirmed_browser_submission_cannot_be_released_early(client, tmp_path):
+    from datetime import timedelta
+    from frutinovelas.models import utcnow
+    video = narrated(client)
+    connect_browser(client)
+    dispatch(client, video)
+    (result, job_id), _ = run(client, tmp_path, FakePage(result=None))
+    assert result == "waiting"
+    body = {"confirmed_no_remote_work": True, "note": "No veo nada en la ventana."}
+    early = client.post(f"/api/v1/flow/jobs/{job_id}/resolve", json=body)
+    assert early.status_code == 409 and "concilie" in early.json()["detail"]
+    with session_factory()() as session:
+        job = session.get(FlowJob, job_id)
+        assert job.state == "running"
+        job.updated_at = utcnow() - timedelta(minutes=21)
+        session.commit()
+    late = client.post(f"/api/v1/flow/jobs/{job_id}/resolve", json=body)
+    assert late.status_code == 200, late.text
