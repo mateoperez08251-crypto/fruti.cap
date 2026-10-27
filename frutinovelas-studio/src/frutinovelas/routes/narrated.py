@@ -18,11 +18,17 @@ from frutinovelas.config import get_settings
 from frutinovelas.db import get_session
 from frutinovelas.models import Asset, Chapter, ComfyConnection, FlowJob, NarratedVideo, Project, Scene
 from frutinovelas.schemas.narrated import (
-    NarratedCreate, NarratedFlowRequest, NarratedPlanRequest, NarratedRenderRequest, NarratedSelectVersion,
-    NarratedShot, NarratedSyncRequest, NarratedUpdate,
+    NarratedCreate,
+    NarratedFlowRequest,
+    NarratedPlanRequest,
+    NarratedRenderRequest,
+    NarratedSelectVersion,
+    NarratedShot,
+    NarratedSyncRequest,
+    NarratedUpdate,
 )
 from frutinovelas.services import flow, scenes
-from frutinovelas.services.assets import asset_path, AssetError
+from frutinovelas.services.assets import AssetError, asset_path
 from frutinovelas.services.flow_transport import FlowError
 from frutinovelas.services.narrated_remote import start_remote_video
 

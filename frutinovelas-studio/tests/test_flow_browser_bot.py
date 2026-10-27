@@ -11,13 +11,13 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from scripts import flow_browser_bot as bot
 from sqlalchemy import select
 
 from conftest import png_bytes
 from frutinovelas.db import session_factory
 from frutinovelas.models import Asset, FlowJob, NarratedVideo
 from frutinovelas.services.flow_transport import local_secret
-from scripts import flow_browser_bot as bot
 
 
 def narrated(client, *, mode="static", aspect="9:16", references=None, title="Historia"):

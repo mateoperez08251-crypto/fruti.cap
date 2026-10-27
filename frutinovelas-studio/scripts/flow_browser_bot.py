@@ -120,7 +120,8 @@ def write_references(job, folder):
 
 
 def same_text(typed, expected):
-    normalize = lambda value: value.replace("\r\n", "\n").replace("\r", "\n").strip()
+    def normalize(value):
+        return value.replace("\r\n", "\n").replace("\r", "\n").strip()
     return normalize(typed) == normalize(expected)
 
 

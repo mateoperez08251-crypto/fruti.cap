@@ -79,9 +79,11 @@ def create_server(*, include_flow: bool = False, include_tiktok: bool = False) -
 
     register_studio_tools(server)
     if include_flow:
-        from frutinovelas.mcp_flow import register_flow_tools
-        register_flow_tools(server, annotations, ToolAnnotations(
-            read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=True))
+        from frutinovelas.mcp_flow import register_flow_tools, register_narrated_tools
+        write_flow = ToolAnnotations(
+            read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=True)
+        register_flow_tools(server, annotations, write_flow)
+        register_narrated_tools(server, annotations, write_flow)
     if include_tiktok:
         from frutinovelas.mcp_tiktok import register_tiktok_tools
         register_tiktok_tools(server)
