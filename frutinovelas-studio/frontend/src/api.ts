@@ -1,5 +1,6 @@
 // Cliente de la API v1 de FRUTINOVELAS Studio.
 
+export type VisualReference = { asset_id: string; role: 'identity' | 'style'; description: string }
 export type NarratedShot = {
   start_seconds: number
   end_seconds: number
@@ -8,6 +9,13 @@ export type NarratedShot = {
   animation_prompt: string
   image_asset_id: string | null
   motion: 'zoom_in' | 'zoom_out' | 'pan_left' | 'pan_right' | 'still'
+  media_mode?: 'static' | 'animated'
+  references?: VisualReference[]
+  visual_style?: string
+  flow_tool?: 'standard' | 'storyboard_studio'
+  flow_scene_id?: string | null
+  flow_image_job_id?: string | null
+  flow_video_job_id?: string | null
 }
 export type NarratedVideo = {
   id: string
@@ -23,7 +31,18 @@ export type NarratedVideo = {
   progress: number
   error: string
   result_url: string | null
+  flow_chapter_id?: string | null
 }
+export type NarratedPlanRequest = {
+  expected_revision: number; media_mode: 'static' | 'animated'; shot_count: number
+  visual_style: string; references: VisualReference[]; flow_tool: 'standard' | 'storyboard_studio'
+}
+export type NarratedFlowRequest = {
+  expected_revision: number; automatic_approval: boolean; clip_seconds: number; request_id: string
+}
+export type NarratedFlowJobStatus = { shot: number; kind: string; id: string; state: string; error: string }
+export type NarratedFlowResult = { video: NarratedVideo; jobs: NarratedFlowJobStatus[] }
+export type NarratedRendererStatus = { configured: boolean; url: string }
 
 export type Project = {
   id: string
@@ -244,6 +263,17 @@ export const api = {
     request<NarratedVideo>('/narrated-videos/' + id, json('PATCH', data)),
   renderNarratedVideo: (id: string, expected_revision: number) =>
     request<NarratedVideo>('/narrated-videos/' + id + '/render', json('POST', { expected_revision })),
+  planNarratedVideo: (id: string, data: NarratedPlanRequest) =>
+    request<NarratedVideo>('/narrated-videos/' + id + '/plan', json('POST', data)),
+  sendNarratedFlow: (id: string, data: NarratedFlowRequest) =>
+    request<NarratedFlowResult>('/narrated-videos/' + id + '/flow', json('POST', data)),
+  animateNarratedImages: (id: string, data: NarratedFlowRequest) =>
+    request<NarratedFlowResult>('/narrated-videos/' + id + '/flow/animate', json('POST', data)),
+  syncNarratedFlow: (id: string, expected_revision: number) =>
+    request<NarratedFlowResult>('/narrated-videos/' + id + '/flow/sync', json('POST', { expected_revision })),
+  narratedRenderer: () => request<NarratedRendererStatus>('/narrated-renderer'),
+  connectNarratedRenderer: (url: string, token: string) =>
+    request<NarratedRendererStatus>('/narrated-renderer', json('POST', { url, token })),
   chapterRenders: (id: string, signal?: AbortSignal) => request<ChapterRender[]>(`/chapters/${id}/renders`, { signal }),
   renderChapter: (id: string, revision: number, scenes: Record<string, number>, requestId: string) => request<ChapterRender>(`/chapters/${id}/render`, json('POST', { expected_revision: revision, scene_revisions: scenes, request_id: requestId, automatic_approval: true })),
   characters: (projectId: string, signal?: AbortSignal) => request<Character[]>(`/projects/${projectId}/characters`, { signal }),

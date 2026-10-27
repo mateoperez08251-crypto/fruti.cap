@@ -5,6 +5,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { api, type Scene } from '../api'
 import { flowApi, type FlowAgentStatus, type FlowJob, type FlowMode, type FlowPlan, type FlowStatus } from '../flow-api'
 import { ConfirmDialog } from '../components/Dialogs'
+import { FlowQwenControls } from '../components/FlowQwenControls'
 import { useToast } from '../components/Toast'
 
 const terminal = ['completed', 'failed', 'cancelled']
@@ -43,7 +44,7 @@ function detectionMessage(agent: FlowAgentStatus) {
   return { title: 'Userflex y Flow detectados', next: 'Pulsa Enfocar ventana para ver la ventana identificada en tu escritorio.' }
 }
 
-function FlowResult({ job, scene, refresh }: { job: FlowJob; scene?: Scene; refresh: () => void }) {
+export function FlowResult({ job, scene, refresh }: { job: FlowJob; scene?: Scene; refresh: () => void }) {
   const toast = useToast()
   const [open, setOpen] = useState(false)
   const [resolveOpen, setResolveOpen] = useState(false)
@@ -82,6 +83,7 @@ function FlowResult({ job, scene, refresh }: { job: FlowJob; scene?: Scene; refr
         onClick={() => run(() => flowApi.retry(job.id, retryId.current))}><RefreshCw size={14} /> Reintentar</button>}
       {['unknown', 'blocked', 'cancel_requested'].includes(job.state) && <button className="btn btn-ghost" onClick={() => setResolveOpen(true)}>Resolver manualmente</button>}
     </div>
+    <FlowQwenControls job={job} onUpdate={refresh} />
     {open && detail.data?.snapshot && <div className="flow-prompt">
       <p className="hint">Prompt enviado · formato {detail.data.snapshot.aspect_ratio}. Las referencias originales se conservan.</p>
       <pre>{detail.data.snapshot.prompt}</pre>

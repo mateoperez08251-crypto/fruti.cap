@@ -16,7 +16,8 @@ export type FlowJob = {
   kind: 'image' | 'video'; state: string; approval: string; error: string; scene_revision: number
   cancel_requested: boolean; remote_stopped: boolean; dependency_id: string | null
   result_asset_id: string | null; result_url: string | null; created_at: string
-  requested_duration: number | null; result_metadata: { duration_seconds?: number; has_audio?: boolean }
+  requested_duration: number | null
+  result_metadata: { duration_seconds?: number; has_audio?: boolean; executor?: string; qwen_step?: number; qwen_message?: string }
   snapshot?: { prompt: string; original_prompt: string; references: { asset_id: string; sha256: string }[]; aspect_ratio: string }
 }
 export type FlowPlan = {
@@ -24,6 +25,7 @@ export type FlowPlan = {
   generation_mode: 'image' | 'video' | 'image_video'; automatic_approval: boolean
   prompts: Record<string, string>; video_prompts: Record<string, string>; duration_seconds: number | null
 }
+export type QwenStatus = { configured: boolean; worker_running?: boolean; model: string; base_url?: string; detail: string }
 const json = (data: unknown): RequestInit => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
 export const flowApi = {
   status: () => request<FlowStatus>('/flow/status'),
@@ -60,4 +62,7 @@ export const flowApi = {
     const data = new FormData(); data.append('file', file)
     return request<FlowJob>(`/flow/jobs/${id}/import`, { method: 'POST', body: data })
   },
+  qwenStatus: () => request<QwenStatus>('/flow/qwen/status'),
+  executeQwen: (id: string, request_id: string, authorized: boolean, confirmed_not_started: boolean) =>
+    request<FlowJob>(`/flow/jobs/${id}/execute-qwen`, json({ request_id, authorized, confirmed_not_started })),
 }
