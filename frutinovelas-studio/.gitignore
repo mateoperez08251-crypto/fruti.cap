@@ -101,3 +101,19 @@ tmp/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# --- Imágenes y pruebas locales: no se suben al repositorio ---
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.bmp
+*.tif
+*.tiff
+*.heic
+*.avif
+# Excepción: recursos de la interfaz que la app necesita
+!frontend/public/**
+# Directorio temporal de pytest en este equipo
+.pytest_tmp/
