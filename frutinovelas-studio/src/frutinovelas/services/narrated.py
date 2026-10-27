@@ -46,6 +46,13 @@ def _motion_filter(motion: str, seconds: float, width: int, height: int) -> str:
             f"trim=duration={seconds:.5f},setpts=PTS-STARTPTS,format=yuv420p")
 
 
+def _clip_filter(seconds: float, width: int, height: int) -> str:
+    """Fit a provider clip to the shot: cover-crop, 24 fps, trim or hold the last frame."""
+    return (f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},"
+            f"fps=24,tpad=stop_mode=clone:stop_duration={seconds:.5f},"
+            f"trim=duration={seconds:.5f},setpts=PTS-STARTPTS,format=yuv420p")
+
+
 def _audio_file(session, row):
     asset = session.get(Asset, row.audio_asset_id)
     if not asset or asset.kind != "narration":
@@ -83,12 +90,22 @@ def render_video(video_id: str):
                 seconds = round(shot["end_seconds"]-shot["start_seconds"], 5)
                 clip = settings.tmp_dir / f"narrated-{video_id}-{index}.mp4"
                 tempfiles.append(clip)
-                _run([ffmpeg, "-y", "-nostdin", "-v", "error", "-loop", "1",
-                      "-framerate", "24", "-i", str(picture),
-                      "-vf", _motion_filter(shot["motion"], seconds, width, height),
-                      "-frames:v", str(round(seconds*24)), "-an",
-                      "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
-                      "-pix_fmt", "yuv420p", str(clip)], timeout=180)
+                if shot.get("media_mode") == "animated":
+                    # Verified Flow clip: fitted to the shot, provider audio dropped.
+                    from frutinovelas.services.narrated_automation import completed_clip
+                    source, _ = completed_clip(session, video, shot)
+                    _run([ffmpeg, "-y", "-nostdin", "-v", "error", "-i", str(source),
+                          "-vf", _clip_filter(seconds, width, height),
+                          "-frames:v", str(round(seconds*24)), "-an",
+                          "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+                          "-pix_fmt", "yuv420p", str(clip)], timeout=180)
+                else:
+                    _run([ffmpeg, "-y", "-nostdin", "-v", "error", "-loop", "1",
+                          "-framerate", "24", "-i", str(picture),
+                          "-vf", _motion_filter(shot["motion"], seconds, width, height),
+                          "-frames:v", str(round(seconds*24)), "-an",
+                          "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+                          "-pix_fmt", "yuv420p", str(clip)], timeout=180)
                 clips.append(clip)
                 video.progress = round((index+1)*90/len(shots))
                 session.commit()

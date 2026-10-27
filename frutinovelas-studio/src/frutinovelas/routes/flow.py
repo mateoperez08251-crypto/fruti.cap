@@ -1,10 +1,12 @@
 """Narrow Flow endpoints: registered scene IDs and media, never arbitrary desktop actions."""
 import secrets
+from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+from pydantic import BaseModel, ConfigDict, Field
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -226,3 +228,65 @@ def import_file(job_id: UUID, request: Request, file: UploadFile, session: Sessi
     finally:
         path.unlink(missing_ok=True)
         file.file.close()
+
+
+# --- Chromium executor (My Content browser module) ---------------------------------
+
+class BrowserEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    event: Literal["project", "submitted", "not_submitted", "downloading", "uncertain", "blocked"]
+    error: str = Field(default="", max_length=1000)
+    project_url: str | None = Field(default=None, max_length=500)
+
+
+def bot(request: Request):
+    key = request.headers.get("x-fruti-flow-bot", "")
+    if getattr(request.state, "flow_mcp", False) or not key or not secrets.compare_digest(key, local_secret("browser")):
+        raise HTTPException(401, "Solo el bot local de Flow puede usar esta ruta.")
+
+
+@router.post("/browser/claim", dependencies=[Depends(bot)])
+def browser_claim(session: Session = Depends(get_session)):
+    from frutinovelas.services import flow_browser
+    try:
+        with flow.operation_lock():
+            return flow_browser.claim(session)
+    except (FlowError, scenes.Conflict) as exc:
+        raise error(exc) from exc
+
+
+@router.post("/browser/jobs/{job_id}/event", dependencies=[Depends(bot)])
+def browser_event(job_id: UUID, body: BrowserEvent, request: Request, session: Session = Depends(get_session)):
+    from frutinovelas.services import flow_browser
+    return mutate(session, request, job_id, lambda j: flow_browser.report(
+        session, j, body.event, error=body.error, project_url=body.project_url))
+
+
+@router.post("/browser/jobs/{job_id}/result", dependencies=[Depends(bot)])
+def browser_result(job_id: UUID, request: Request, file: UploadFile, session: Session = Depends(get_session)):
+    from frutinovelas.services import flow_browser
+    job = scoped_job(session, request, job_id)
+    limit = (get_settings().flow_max_video_mb if job.kind == "video" else get_settings().max_upload_mb) * 1024**2
+    import uuid
+    path = flow_dir() / ("browser-" + uuid.uuid4().hex + ".part")
+    try:
+        count = 0
+        with path.open("xb") as stream:
+            while chunk := file.file.read(1024**2):
+                count += len(chunk)
+                if count > limit:
+                    raise HTTPException(413, "El resultado supera el límite de tamaño.")
+                stream.write(chunk)
+        return mutate(session, request, job_id, lambda j: flow_browser.import_browser_result(session, j, path))
+    finally:
+        path.unlink(missing_ok=True)
+        file.file.close()
+
+
+@router.get("/browser/projects")
+def browser_projects(request: Request):
+    """Story key -> Flow project URL (local UI only; URLs are private to this desktop)."""
+    from frutinovelas.services import flow_browser
+    if request.state.flow_mcp:
+        raise HTTPException(403, "Las URL de proyectos Flow solo se muestran en Studio local.")
+    return flow_browser.project_map()

@@ -180,7 +180,7 @@ def dispatch_flow(session, row, request):
                     flow_tool=next(iter(tools)),
                     duration_seconds=request.clip_seconds if animated else None,
                     automatic_approval=request.automatic_approval)
-    jobs = flow.enqueue_plan(session, plan, commit=False)
+    jobs = flow.enqueue_plan(session, plan, commit=False, project_key=row.id)
     batch = session.get(FlowBatch, str(request.request_id))
     batch.specification = {**batch.specification, "narration_request": specification, "narrated_video_id": row.id}
     row.shots = updated
@@ -200,6 +200,28 @@ def linked_job(session, row, shot, kind):
     return job
 
 
+def latest_retry(session, job):
+    """Follow only explicit retries of this job, never another prompt on the scene."""
+    seen = set()
+    while job.id not in seen:
+        seen.add(job.id)
+        retry = session.scalar(select(FlowJob).where(
+            FlowJob.scene_id == job.scene_id, FlowJob.kind == job.kind,
+            FlowJob.snapshot["retry_of"].as_string() == job.id,
+        ).order_by(FlowJob.created_at.desc()).limit(1))
+        if not retry:
+            break
+        job = retry
+    return job
+
+
+def shot_job(session, row, shot, identifier, kind="image"):
+    job = session.get(FlowJob, str(identifier))
+    if not job or job.project_id != row.project_id or job.scene_id != str(shot.get("flow_scene_id")) or job.kind != kind:
+        raise FlowError("Un resultado de Flow no pertenece a esta toma y proyecto.")
+    return job
+
+
 def sync_results(session, row):
     updated, statuses = [], []
     for shot in row.shots:
@@ -207,20 +229,16 @@ def sync_results(session, row):
         for kind in ("image", "video"):
             job = linked_job(session, row, current, kind)
             if job:
-                # Follow only explicit retries of this job, never another prompt on the scene.
-                seen = set()
-                while job.id not in seen:
-                    seen.add(job.id)
-                    retry = session.scalar(select(FlowJob).where(
-                        FlowJob.scene_id == job.scene_id, FlowJob.kind == kind,
-                        FlowJob.snapshot["retry_of"].as_string() == job.id,
-                    ).order_by(FlowJob.created_at.desc()).limit(1))
-                    if not retry:
-                        break
-                    job = retry
+                job = latest_retry(session, job)
                 current[f"flow_{kind}_job_id"] = job.id
                 statuses.append({"shot": len(updated), "kind": kind, "id": job.id, "state": job.state, "error": job.error})
-                if job.state == "completed" and kind == "image" and current.get("image_asset_id") != job.result_asset_id:
+                if kind != "image":
+                    continue
+                pinned = current.get("selected_image_job_id")
+                if pinned:
+                    # An explicit version choice is never replaced by a newer retry.
+                    job = shot_job(session, row, current, pinned)
+                if job.state == "completed" and current.get("image_asset_id") != job.result_asset_id:
                     verified_path(job)
                     current["image_asset_id"] = job.result_asset_id
         updated.append(current)
@@ -230,6 +248,39 @@ def sync_results(session, row):
         row.revision += 1
         session.commit()
     return statuses
+
+
+def versions(session, row, index):
+    """All image attempts of one shot, oldest first; previous results are kept."""
+    if not 0 <= index < len(row.shots) or not row.shots[index].get("flow_scene_id"):
+        raise FlowError("La toma no está vinculada a Flow.")
+    return list(session.scalars(select(FlowJob).where(
+        FlowJob.project_id == row.project_id, FlowJob.scene_id == row.shots[index]["flow_scene_id"],
+        FlowJob.kind == "image").order_by(FlowJob.created_at, FlowJob.id)))
+
+
+def select_version(session, row, request):
+    if row.revision != request.expected_revision or row.state in ("queued", "rendering"):
+        raise FlowError("El proyecto cambió o está exportándose. Recarga antes de elegir versión.")
+    index = request.shot_index
+    versions(session, row, index)
+    shot = dict(row.shots[index])
+    if request.job_id is None:
+        shot["selected_image_job_id"] = None
+        job = latest_retry(session, linked_job(session, row, shot, "image"))
+    else:
+        job = shot_job(session, row, shot, request.job_id)
+        if job.state != "completed":
+            raise FlowError("Solo puedes elegir una versión completada.")
+        shot["selected_image_job_id"] = job.id
+    if job.state == "completed":
+        verified_path(job)
+        shot["image_asset_id"] = job.result_asset_id
+    row.shots = [shot if i == index else s for i, s in enumerate(row.shots)]
+    row.state, row.progress, row.result_path, row.error = "draft", 0, None, ""
+    row.revision += 1
+    session.commit()
+    return job
 
 
 def completed_clip(session, row, shot):
@@ -280,7 +331,7 @@ def animate_existing_images(session, row, request):
                     request_id=request.request_id, scene_revisions=revisions, generation_mode="video",
                     video_prompts=prompts, duration_seconds=request.clip_seconds, aspect_ratio=row.aspect_ratio,
                     flow_tool=selected[0].get("flow_tool", "standard"))
-    jobs = flow.enqueue_plan(session, plan, commit=False)
+    jobs = flow.enqueue_plan(session, plan, commit=False, project_key=row.id)
     selected_ids = {str(identifier) for identifier in revisions}
     row.shots = [{**shot, "flow_video_job_id": str(uuid5(request.request_id, shot["flow_scene_id"] + ":video"))}
                  if shot.get("flow_scene_id") in selected_ids else shot for shot in row.shots]

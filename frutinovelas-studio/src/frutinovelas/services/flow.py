@@ -154,6 +154,15 @@ def enqueue_plan(session, plan, commit=True, project_key=None):
                         "duration_seconds": (plan.duration_seconds or rev.duration_seconds) if kind == "video" else None,
                         "automatic_approval": plan.automatic_approval, "mode": connection.mode,
                         "agent_id": connection.agent_id, "use_provider_audio_in_montage": False}
+            if connection.mode == "browser":
+                from frutinovelas.services.flow_browser import IMAGE_RATIOS, VIDEO_RATIOS, VIDEO_SECONDS
+                if kind == "video" and snapshot["duration_seconds"] not in VIDEO_SECONDS:
+                    raise FlowError(f"Flow ofrece clips de {', '.join(map(str, VIDEO_SECONDS))} s; "
+                                    f"«{scene.title}» pide {snapshot['duration_seconds']} s. No se redondea.")
+                if snapshot["aspect_ratio"] not in (VIDEO_RATIOS if kind == "video" else IMAGE_RATIOS):
+                    raise FlowError("Flow no ofrece esa relación de aspecto para este tipo de resultado.")
+                if len(refs) > 3:
+                    raise FlowError("El ejecutor de navegador admite hasta tres referencias por toma.")
             output.append(FlowJob(id=str(uuid5(plan.request_id, scene.id + ":" + kind)), batch_id=request_id,
                                  project_id=project.id, chapter_id=chapter.id, scene_id=scene.id,
                                  active_key=scene.id + ":" + kind, position=len(output), kind=kind,

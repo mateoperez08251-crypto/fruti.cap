@@ -27,7 +27,7 @@ def flow_dir() -> Path:
 
 
 def local_secret(name: str) -> str:
-    if name not in ("agent", "mcp"):
+    if name not in ("agent", "mcp", "browser"):
         raise ValueError("Unknown credential")
     path = flow_dir() / (name + ".credential")
     # Both processes use the existing local encryption key, never a provider password.

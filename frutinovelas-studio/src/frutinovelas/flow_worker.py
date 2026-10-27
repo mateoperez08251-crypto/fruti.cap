@@ -70,6 +70,8 @@ class FlowWorker:
                                .order_by(FlowJob.kind, FlowJob.created_at, FlowJob.position).limit(1))
             if job is None or job.state == "awaiting_import":
                 return
+            if job.snapshot.get("mode") == "browser":
+                return  # The Chromium bot claims these through /flow/browser/*.
             job_id = job.id
             if job.state == "queued" and job.snapshot["mode"] == "assisted":
                 flow.change(s, job, "awaiting_import", "Copia el prompt guardado, genera en Flow e importa la descarga de esta escena.")

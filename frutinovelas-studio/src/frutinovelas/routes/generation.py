@@ -173,7 +173,9 @@ def discard_generated_output(job_id: str, session: Session = Depends(get_session
         if session.scalar(select(Character.id).where(Character.reference_asset_id == asset_id).limit(1)):
             raise HTTPException(409, "La imagen es una referencia de personaje.")
         for video in session.scalars(select(NarratedVideo)):
-            if any(shot.get("image_asset_id") == asset_id for shot in video.shots):
+            if any(shot.get("image_asset_id") == asset_id
+                   or any(ref.get("asset_id") == asset_id for ref in shot.get("references") or [])
+                   for shot in video.shots):
                 raise HTTPException(409, "La imagen se utiliza en un video narrado.")
         asset = session.get(Asset, asset_id)
         if asset:
