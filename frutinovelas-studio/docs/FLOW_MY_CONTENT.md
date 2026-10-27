@@ -65,11 +65,46 @@ ni la creación de assets. El editor exterior de la herramienta tiene otro cuadr
 de texto que no equivale al campo de generación de la plantilla. La inspección
 descarta el iframe oculto de compilación para no confundirlo con la aplicación.
 
-**Alcance actual:** conexión y configuración comprobadas; la rutina específica
-de generar y descargar imágenes sigue pendiente. `automation_ready` permanece
-falso. El controlador de escritorio UserFLEX existente no se convierte
-automáticamente en un controlador de pestaña.
+**Alcance actual:** conexión, generación de una imagen con referencia y descarga
+original comprobadas en Flow. Falta asignar el archivo a una toma desde el programa;
+`automation_ready` permanece falso. El controlador de escritorio UserFLEX existente
+no se convierte automáticamente en un controlador de pestaña.
 
 Las 16 pruebas focalizadas cubren el puente, perfil separado, navegador existente,
 estados de sesión, selección explícita, opciones inválidas y detención si el modelo
 o duración no están disponibles. No prueban calidad generativa ni una descarga real.
+
+## Una operación con resumen corto
+
+`scripts/flow_image_job.py` agrupa proyecto nuevo → referencia opcional → selección
+explícita de imagen Nano Banana 2.1, 9:16 y x1 → envío → espera → descarga original.
+Cada solicitud nueva crea un proyecto nuevo. Una repetición del mismo `request_id`
+retoma únicamente la descarga o devuelve el archivo existente; no crea otra generación.
+Los estados inciertos o una preparación interrumpida requieren inspección y no se reenvían.
+El comando activa descargas solo en su propio proceso, sin modificar My Content.
+Actualmente requiere los nombres de controles observados en la interfaz inglesa;
+si no aparecen, se detiene en lugar de adivinarlos.
+
+Guardar el JSON de solicitud, el preset, las referencias y los resultados fuera de Git.
+Una solicitud contiene `request_id` (UUID) y `prompt` literal, con `reference` opcional.
+También admite `preset_path` y una `scene` explícita en lugar de `prompt`.
+El preset tiene `style` y `reference` opcional: cada escena nueva reutiliza el estilo,
+sin heredar automáticamente escenas anteriores. El preset privado de esta prueba
+está en `flow/google_browser/channel_style.json`, dentro de los datos del usuario.
+
+```powershell
+& 'RUTA_AL_PYTHON_DEL_BOT' scripts/flow_image_job.py --source 'RUTA_A_MY_CONTENT' --request 'RUTA_PRIVADA_A_SOLICITUD.json'
+```
+
+El resultado es un JSON corto con `state`, `project_url` y `output`, o un error
+concreto. No imprime el DOM completo ni los prompts. Los registros están en
+`flow/google_browser/image_jobs/`. Un bloqueo `.lock` evita ejecuciones concurrentes;
+si el proceso muere, verificar primero su proyecto y su registro antes de liberar
+manualmente ese bloqueo. No cambiar el ID para sortear una recepción incierta.
+
+Se comprobó una imagen de biblioteca con dos personajes usando referencia de estilo,
+una salida y descarga original. La reanudación del comando descargó ese resultado
+sin generar de nuevo. Las 22 pruebas focalizadas del puente, controles y trabajos
+incluyen texto literal, preset con escena explícita, exclusión concurrente y corte
+durante el envío. Las pruebas unitarias no miden calidad generativa. La asignación
+de tomas, montaje y control de este comando desde MCP siguen pendientes.
