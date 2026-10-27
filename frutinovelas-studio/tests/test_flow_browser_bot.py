@@ -365,3 +365,10 @@ def test_local_montage_mixes_still_and_flow_clip_with_master_audio_only(client, 
     kinds = [s["codec_type"] for s in probe["streams"]]
     assert kinds.count("audio") == 1 and kinds.count("video") == 1
     assert abs(float(probe["format"]["duration"]) - duration) < 0.15
+
+
+def test_real_page_refuses_unverified_video_before_touching_flow_and_compares_newlines():
+    with pytest.raises(bot.ControlsMissing):
+        bot.FlowPage(object()).configure({"kind": "video"})
+    assert bot.same_text(" Fruta\nsol ", " Fruta\r\nsol\r\n")
+    assert not bot.same_text("Fruta", "Fruta madura")

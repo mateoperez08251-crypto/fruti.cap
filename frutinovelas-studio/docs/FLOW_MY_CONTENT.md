@@ -108,3 +108,55 @@ sin generar de nuevo. Las 22 pruebas focalizadas del puente, controles y trabajo
 incluyen texto literal, preset con escena explícita, exclusión concurrente y corte
 durante el envío. Las pruebas unitarias no miden calidad generativa. La asignación
 de tomas, montaje y control de este comando desde MCP siguen pendientes.
+
+## Ejecutor integrado con la cola de Studio (`iniciar_flow_bot.cmd`)
+
+`scripts/flow_browser_bot.py` conecta la cola Flow de Studio con el navegador de
+My Content. UserFLEX/UIA no participa en esta ruta.
+
+1. En Studio, Flow Automation → Controlador **Navegador** → Conectar.
+2. Abre `iniciar_flow_bot.cmd` con Studio en marcha. Obtiene la credencial local
+   `browser` con el Python de Studio y la pasa solo por el entorno del proceso.
+3. En el video narrado: preparar tomas (Qwen) → **Enviar tomas guardadas a Flow**.
+   El bot reclama un trabajo cada vez (`POST /api/v1/flow/browser/claim`).
+4. Studio marca `submitting` antes de entregar el trabajo. El bot abre el proyecto,
+   adjunta las referencias congeladas (huella SHA-256 comprobada), configura tipo,
+   formato, modelo y x1 **después** de adjuntar, escribe el prompt literal, anota
+   `sending` en su diario y pulsa una sola vez *Start generation*.
+5. Espera una tarjeta que no existía antes del envío, descarga en tamaño original y
+   la sube a Studio (`/flow/browser/jobs/{id}/result`). Studio valida formato,
+   relación de aspecto y, en video, decodificación completa; después **Sincronizar**
+   asigna la imagen a su toma. Los resultados anteriores se conservan como versiones;
+   «Usar esta versión» fija una y la sincronización no la reemplaza.
+
+**Proyecto por historia.** La clave es el ID del video narrado (o el capítulo en
+planes por capítulo). La primera vez el bot crea *New project* y registra su URL en
+`flow/browser_projects.json` (datos de usuario) antes de subir o enviar nada. Los
+siguientes trabajos y reintentos de la misma historia abren ese proyecto. Otro video
+narrado es otra historia y recibe un proyecto nuevo. Un vínculo existente no se
+reemplaza automáticamente.
+
+**Recuperación.** El diario del bot está en `flow/google_browser/bot_jobs/`. Si se
+detiene antes de `sending`, informa `not_submitted` y el trabajo queda fallido y
+reintentable. Si se corta durante el clic, o falta el diario, queda `unknown`: hay
+que revisar Flow y conciliar en Studio; no se reenvía. Si ya consta `submitted`, la
+siguiente ejecución solo recupera la descarga. Una descarga rechazada por Studio
+queda `unknown`. `bot.lock` impide dos bots sobre el mismo perfil.
+
+**Montaje.** `engine=auto` usa FFmpeg local cuando hay clips Flow o no hay servidor
+remoto. Las tomas estáticas usan movimiento FFmpeg; las animadas usan su clip
+verificado, recortado o prolongado (último fotograma) a la duración de la toma y sin
+su audio. La narración original es la única pista. Una toma animada sin clip
+completado bloquea el montaje en lugar de sustituirse por la imagen.
+
+En modo navegador, Studio rechaza al encolar duraciones distintas de 4, 6, 8 o 10 s
+y formatos que Flow no ofrece; no redondea. MCP autenticado expone `narrated_*`
+(planificar, enviar, animar, sincronizar, versiones, montar) con resúmenes sin
+prompts, rutas ni URL de proyectos.
+
+**Verificado sin créditos:** rutas y reglas con Studio real (TestClient) y una página
+Flow simulada; montaje real con FFmpeg de imagen fija + clip con audio propio.
+**Sin verificar con Flow real:** el ciclo completo del bot, varias referencias en un
+mismo envío, la detección de tarjetas nuevas en un proyecto reutilizado y todos los
+controles de video (etiquetas de duración, modo Fotogramas, descarga de MP4). Si un
+control no aparece, el bot se detiene antes de enviar. `automation_ready` sigue falso.

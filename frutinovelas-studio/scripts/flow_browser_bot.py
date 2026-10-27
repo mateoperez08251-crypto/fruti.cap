@@ -227,8 +227,8 @@ def run_once(api, journal, page_factory, workdir):
 # --- Playwright page (observed English Flow UI) -------------------------------------
 
 class FlowPage:
-    def __init__(self, page, timeout=600):
-        self.page, self.timeout = page, timeout
+    def __init__(self, page, timeout=600, video_enabled=False):
+        self.page, self.timeout, self.video_enabled = page, timeout, video_enabled
 
     def _one(self, locator, what):
         if locator.count() != 1:
@@ -259,6 +259,9 @@ class FlowPage:
             option.click()
 
     def configure(self, job):
+        if job["kind"] == "video" and not self.video_enabled:
+            # Frames mode and video labels have not been verified in a real run yet.
+            raise ControlsMissing("Video desde imagen aún no verificado en Flow real; usa --enable-video tras comprobarlo.")
         from playwright.sync_api import expect
         close = self.page.get_by_role("button", name="Close", exact=True)
         if close.count() == 1 and close.is_visible():
@@ -337,6 +340,8 @@ def main(argv=None):
     parser.add_argument("--studio", default="http://127.0.0.1:" + os.environ.get("FRUTINOVELAS_API_PORT", "8765"))
     parser.add_argument("--once", action="store_true", help="Procesa una sola acción y termina")
     parser.add_argument("--poll", type=float, default=15)
+    parser.add_argument("--enable-video", action="store_true",
+                        help="Permite clips tras verificar a mano los controles de video de Flow")
     args = parser.parse_args(argv)
     key = os.environ.pop("FRUTI_FLOW_BOT_KEY", "")
     if not key:
@@ -365,7 +370,7 @@ def main(argv=None):
         with download_browser(browser, manifest) as context:
             page = context.new_page()
             try:
-                yield FlowPage(page)
+                yield FlowPage(page, video_enabled=args.enable_video)
             finally:
                 page.close()
 
