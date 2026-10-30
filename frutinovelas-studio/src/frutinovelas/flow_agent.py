@@ -329,7 +329,7 @@ def create_agent_app(journal=None, driver=None, *, start_runner=True):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Agente Flow local; nunca expone el escritorio en Internet.")
-    parser.add_argument("command", choices=["serve", "inspect", "schema", "verify-profile", "resolve"])
+    parser.add_argument("command", choices=["serve", "inspect", "schema", "verify-profile", "resolve", "vision-connect"])
     parser.add_argument("--profile", type=Path, default=flow_dir() / "profile.json")
     parser.add_argument("--executable", type=Path)
     parser.add_argument("--output", type=Path, help="Guardar inspect/schema directamente como JSON UTF-8.")
@@ -343,7 +343,10 @@ def main(argv=None):
     if args.include_edit_labels and args.command != "inspect":
         parser.error("--include-edit-labels solo se utiliza con inspect.")
     try:
-        if args.command in ("schema", "inspect"):
+        if args.command == "vision-connect":
+            from frutinovelas.flow_vision import connect_interactively
+            connect_interactively()
+        elif args.command in ("schema", "inspect"):
             if args.command == "schema":
                 document = Profile.model_json_schema()
             else:
