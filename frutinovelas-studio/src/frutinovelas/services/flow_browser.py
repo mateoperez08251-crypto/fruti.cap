@@ -94,7 +94,7 @@ def _payload(session, job, action):
     return payload
 
 
-def claim(session):
+def claim(session, *, images_only=False):
     """Return the next action for the bot, registering intent before any submission."""
     connection = session.get(FlowConnection, "default")
     if not connection or not connection.connected or connection.mode != "browser":
@@ -103,6 +103,8 @@ def claim(session):
                if j.snapshot.get("mode") == "browser"]
     if pending:
         job = pending[0]
+        if images_only and job.kind != "image":
+            return {"action": "blocked", "detail": "Hay un video activo; Qwen espera sin tomar su control."}
         if job.state in CONFIRMED:
             return _payload(session, job, "recover")
         if job.state in UNCERTAIN:
@@ -110,6 +112,8 @@ def claim(session):
         return {"action": "blocked", "request_id": job.id, "state": job.state,
                 "detail": job.error or "Hay un trabajo que requiere revisión en Studio."}
     queued = [j for j in _browser_jobs(session, ("queued",)) if j.snapshot.get("mode") == "browser"]
+    if images_only:
+        queued = [j for j in queued if j.kind == "image"]
     if not queued:
         return {"action": "idle", "detail": "No hay trabajos Flow pendientes."}
     job = sorted(queued, key=lambda j: (j.kind, j.created_at, j.position))[0]

@@ -43,7 +43,7 @@ def public_job(job, *, details=False):
         "id", "batch_id", "project_id", "chapter_id", "scene_id", "position", "kind", "state", "approval",
         "cancel_requested", "remote_stopped", "error", "result_asset_id", "result_sha256",
         "result_metadata", "created_at", "updated_at", "dependency_id")}
-    result.update(provider="flow", title=job.snapshot["title"],
+    result.update(provider="flow", execution_mode=job.snapshot.get("mode"), title=job.snapshot["title"],
                   scene_revision=job.snapshot["scene_revision"],
                   result_url=f"/api/v1/flow/jobs/{job.id}/content" if job.result_path else None,
                   requested_duration=job.snapshot.get("duration_seconds"))

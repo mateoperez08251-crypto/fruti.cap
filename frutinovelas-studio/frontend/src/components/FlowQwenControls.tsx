@@ -6,8 +6,15 @@ export function FlowQwenControls({ job, eligible = true, onUpdate }: { job: Flow
   const requestId = useRef(crypto.randomUUID())
   const [authorized, setAuthorized] = useState(false)
   const [notStarted, setNotStarted] = useState(false)
-  const status = useQuery({ queryKey: ['flow-qwen-status'], queryFn: flowApi.qwenStatus, retry: 0, refetchInterval: 10000, refetchIntervalInBackground: false })
+  const browser = job.execution_mode === 'browser' || job.result_metadata.executor === 'browser_qwen'
+  const status = useQuery({ queryKey: ['flow-qwen-status'], queryFn: flowApi.qwenStatus, enabled: !browser, retry: 0, refetchInterval: 10000, refetchIntervalInBackground: false })
   const execute = useMutation({ mutationFn: () => flowApi.executeQwen(job.id, requestId.current, authorized, notStarted), onSuccess: onUpdate })
+  if (browser) return <section className="flow-section" aria-label="Qwen en Chromium">
+    <h3>Qwen en Chromium</h3>
+    <p role="status">{job.result_metadata.qwen_message ?? 'Para que Qwen controle las imágenes pendientes, abre iniciar_qwen_chromium.cmd con Studio activo y el bot anterior cerrado.'}</p>
+    <p className="hint">Qwen observa esta pestaña y decide las acciones. La descarga se compara con la imagen seleccionada y con las referencias antes de importarla.</p>
+    {job.error && <p role="alert">{job.error}</p>}
+  </section>
   if (job.result_metadata.executor === 'qwen') return <div className="flow-section">
     <p role="status">Qwen · Paso {job.result_metadata.qwen_step ?? 0} · {job.result_metadata.qwen_message ?? 'Pendiente de ejecución'}</p>
     {job.error && <p role="alert">{job.error}</p>}

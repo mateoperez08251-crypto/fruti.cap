@@ -23,7 +23,7 @@ beforeEach(() => {
   vi.spyOn(api, 'projects').mockResolvedValue([project])
   vi.spyOn(api, 'chapters').mockResolvedValue([chapter])
   vi.spyOn(api, 'scenes').mockResolvedValue([scene])
-  vi.spyOn(flowApi, 'status').mockResolvedValue({ connected: true, mode: 'assisted', agent: {
+  vi.spyOn(flowApi, 'status').mockResolvedValue({ connected: true, mode: 'uia', agent: {
     available: false, window_open: false, flow_available: null, authentication: 'unknown', modes: {}, detail: 'Sin perfil verificado.' } })
   vi.spyOn(flowApi, 'jobs').mockResolvedValue([])
 })
@@ -33,7 +33,18 @@ function show() {
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
     <MemoryRouter initialEntries={['/flow-automation?project_id=project&chapter_id=chapter']}><ToastProvider><FlowPage /></ToastProvider></MemoryRouter>
   </QueryClientProvider>)
+  fireEvent.change(screen.getByLabelText('Controlador'), { target: { value: 'uia' } })
 }
+
+it('shows Chromium setup without desktop detection in browser mode', async () => {
+  vi.mocked(flowApi.status).mockResolvedValue({ connected: true, mode: 'browser', agent: {
+    available: false, window_open: false, flow_available: null, authentication: 'unknown', modes: {}, detail: '' } })
+  show()
+  await screen.findByText('Conectado · Bot Chromium (My Content)')
+  expect(screen.queryByRole('button', { name: 'Detectar Userflex / Flow' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Enfocar ventana' })).toBeNull()
+  expect(screen.getAllByText('iniciar_qwen_chromium.cmd').length).toBeGreaterThan(0)
+})
 
 it('starts with manual approval and sends only selected scene revisions', async () => {
   const generate = vi.spyOn(flowApi, 'generate').mockResolvedValue([job])

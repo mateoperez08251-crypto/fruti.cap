@@ -67,11 +67,11 @@ function PreviewDialog({ onClose, trigger }: { onClose: () => void; trigger: Ref
         }
       }, { once: true })
       setLive(true)
-      setMessage('Vista en vivo de la ventana elegida. La generación sigue en UserFLEX.')
+      setMessage('Vista en vivo de la ventana elegida. La generación sigue en Chromium.')
     } catch (error) {
       if (mounted.current) setMessage(error instanceof DOMException && error.name === 'NotAllowedError'
-        ? 'No se compartió ninguna ventana. Pulsa Elegir ventana y selecciona UserFLEX si quieres verla.'
-        : 'No se pudo mostrar la ventana. Comprueba que UserFLEX esté abierto e inténtalo otra vez.')
+        ? 'No se compartió ninguna ventana. Pulsa Elegir ventana y selecciona Chromium si quieres verla.'
+        : 'No se pudo mostrar la ventana. Comprueba que Chromium esté abierto e inténtalo otra vez.')
     } finally {
       pending.current = false
       if (mounted.current) setBusy(false)
@@ -84,7 +84,7 @@ function PreviewDialog({ onClose, trigger }: { onClose: () => void; trigger: Ref
       <h2 id={titleId}>Ventana de Flow</h2>
       <button type="button" className="btn btn-ghost" aria-label="Cerrar vista de Flow" onClick={onClose} autoFocus><X size={18} aria-hidden="true"/></button>
     </div>
-    <p id={descriptionId} className="hint">Elige la ventana de UserFLEX en el selector del navegador. Esta vista permanece en tu PC, sin grabarse ni enviarse a Qwen. Para manejar Flow, usa UserFLEX o tu controlador.</p>
+    <p id={descriptionId} className="hint">Elige la ventana de Chromium con Flow. Esta vista permanece en tu PC. Si ejecutas el controlador Qwen, este enviará sus propias capturas de la pestaña a tu servidor Qwen.</p>
     <video ref={video} className="flow-window-video" aria-label="Vista de la ventana compartida" autoPlay muted playsInline controls hidden={!live}/>
     {!live && <div className="flow-window-empty"><Monitor size={36} aria-hidden="true"/><span>Aquí verás la generación de imágenes y clips.</span></div>}
     <p role="status">{message}</p>

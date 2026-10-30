@@ -245,13 +245,48 @@ def bot(request: Request):
         raise HTTPException(401, "Solo el bot local de Flow puede usar esta ruta.")
 
 
+class BrowserClaim(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    images_only: bool = False
+
+
 @router.post("/browser/claim", dependencies=[Depends(bot)])
-def browser_claim(session: Session = Depends(get_session)):
+def browser_claim(body: BrowserClaim | None = None, session: Session = Depends(get_session)):
     from frutinovelas.services import flow_browser
     try:
         with flow.operation_lock():
-            return flow_browser.claim(session)
+            return flow_browser.claim(session, images_only=bool(body and body.images_only))
     except (FlowError, scenes.Conflict) as exc:
+        raise error(exc) from exc
+
+
+class BrowserQwenDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    observation: str = Field(min_length=1, max_length=24000)
+    screenshot: str = Field(min_length=1, max_length=8 * 1024 * 1024)
+    history: list[str] = Field(default_factory=list, max_length=100)
+
+
+@router.post("/browser/jobs/{job_id}/qwen", dependencies=[Depends(bot)])
+def browser_qwen(job_id: UUID, body: BrowserQwenDecision, session: Session = Depends(get_session)):
+    from frutinovelas.services.flow_browser_qwen import decide
+    job = session.get(FlowJob, str(job_id))
+    connection = session.get(FlowConnection, "default")
+    if (not job or job.kind != "image" or job.snapshot.get("mode") != "browser"
+            or job.state not in ("submitting", "running", "downloading") or job.cancel_requested
+            or not connection or not connection.connected or connection.mode != "browser"):
+        raise HTTPException(409, "Qwen solo controla una imagen activa del bot de navegador.")
+    try:
+        job.result_metadata = {**job.result_metadata, "executor": "browser_qwen",
+                               "qwen_step": len(body.history) + 1, "qwen_message": "Observando Chromium y decidiendo la siguiente acción."}
+        session.commit()
+        decision = decide(job, body.observation, body.screenshot, body.history)
+        session.refresh(job)
+        session.refresh(connection)
+        if job.cancel_requested or job.state not in ("submitting", "running", "downloading") or not connection.connected:
+            raise FlowError("La toma se detuvo mientras Qwen respondía. No se ejecutará otra acción.")
+        return decision
+    except FlowError as exc:
         raise error(exc) from exc
 
 
@@ -263,7 +298,7 @@ def browser_event(job_id: UUID, body: BrowserEvent, request: Request, session: S
 
 
 @router.post("/browser/jobs/{job_id}/result", dependencies=[Depends(bot)])
-def browser_result(job_id: UUID, request: Request, file: UploadFile, session: Session = Depends(get_session)):
+def browser_result(job_id: UUID, request: Request, file: UploadFile, preview: UploadFile | None = None, session: Session = Depends(get_session)):
     from frutinovelas.services import flow_browser
     job = scoped_job(session, request, job_id)
     limit = (get_settings().flow_max_video_mb if job.kind == "video" else get_settings().max_upload_mb) * 1024**2
@@ -277,10 +312,34 @@ def browser_result(job_id: UUID, request: Request, file: UploadFile, session: Se
                 if count > limit:
                     raise HTTPException(413, "El resultado supera el límite de tamaño.")
                 stream.write(chunk)
-        return mutate(session, request, job_id, lambda j: flow_browser.import_browser_result(session, j, path))
+        def import_checked(j):
+            if j.result_metadata.get("executor") == "browser_qwen":
+                import io
+
+                from frutinovelas.services.flow_browser_qwen import verify_result
+                if preview is None:
+                    raise FlowError("Falta la vista de la imagen seleccionada por Qwen.")
+                raw = preview.file.read(8 * 1024**2 + 1)
+                if len(raw) > 8 * 1024**2:
+                    raise FlowError("La vista de comprobación es demasiado grande.")
+                refs = []
+                for ref in j.snapshot.get("references", []):
+                    flow._reference(session, ref["asset_id"])
+                    refs.append(asset_path(get_settings(), session.get(Asset, ref["asset_id"])))
+                verify_result(path, io.BytesIO(raw), refs)
+            executor = j.result_metadata.get("executor")
+            result = flow_browser.import_browser_result(session, j, path)
+            if executor == "browser_qwen":
+                result.result_metadata = {**result.result_metadata, "executor": executor,
+                                          "qwen_message": "Descarga comprobada e importada en Studio."}
+                session.commit()
+            return result
+        return mutate(session, request, job_id, import_checked)
     finally:
         path.unlink(missing_ok=True)
         file.file.close()
+        if preview is not None:
+            preview.file.close()
 
 
 @router.get("/browser/projects")

@@ -177,11 +177,12 @@ export function FlowPage() {
   const chapterId = params.get('chapter_id') ?? ''
   const qc = useQueryClient()
   const toast = useToast()
-  const [mode, setMode] = useState<FlowMode>('assisted')
+  const [mode, setMode] = useState<FlowMode>('browser')
   const [authorized, setAuthorized] = useState(false)
   const projects = useQuery({ queryKey: ['projects'], queryFn: () => api.projects() })
   const chapters = useQuery({ queryKey: ['chapters', projectId], queryFn: () => api.chapters(projectId), enabled: !!projectId })
   const status = useQuery({ queryKey: ['flow-status'], queryFn: flowApi.status, refetchInterval: 30000, refetchIntervalInBackground: false, retry: 0 })
+  const controller = status.data?.connected ? status.data.mode : mode
   const detection = useMutation({
     mutationFn: async () => ({ agent: await flowApi.detect(), checkedAt: new Date().toISOString() }),
     onSuccess: ({ agent }) => qc.setQueryData<FlowStatus>(['flow-status'], previous => previous ? { ...previous, agent } : previous),
@@ -197,7 +198,7 @@ export function FlowPage() {
     <header className="page-head"><div><div className="eyebrow">PROVEEDOR ADICIONAL</div><h1>Flow Automation</h1><p className="muted">Imágenes, revisión y animación por escena.</p></div></header>
     <section className="card flow-section">
       <div className="row flow-between"><h2><PlugZap size={20} /> Conexión</h2><span className="flow-state">{status.data?.connected ? `Conectado · ${status.data.mode === 'uia' ? 'Control Windows' : status.data.mode === 'browser' ? 'Bot Chromium (My Content)' : 'Modo asistido'}` : 'Desconectado'}</span></div>
-      <div className="notice" role={detectionError && !detection.isPending ? 'alert' : 'status'} aria-label="Resultado de detección" aria-busy={detection.isPending}>
+      {controller === 'uia' && <div className="notice" role={detectionError && !detection.isPending ? 'alert' : 'status'} aria-label="Resultado de detección" aria-busy={detection.isPending}>
         <div><strong>{message.title}</strong><p>{message.next}</p>
           {!detection.isPending && !detectionError && agent && <>
             {agent.window_open && agent.window_title && <p>Ventana identificada: <strong>{agent.window_title}</strong></p>}
@@ -205,17 +206,20 @@ export function FlowPage() {
           </>}
           {detection.isSuccess && <p className="hint">Última detección: <time dateTime={detection.data.checkedAt}>{new Date(detection.data.checkedAt).toLocaleTimeString()}</time></p>}
         </div>
-      </div>
-      {!detection.isPending && agent && <p className="hint">Ventana: {agent.window_open == null ? 'sin comprobar' : agent.window_open ? 'abierta' : 'sin identificar'} · Flow: {agent.flow_available == null ? 'sin verificar' : agent.flow_available ? 'detectado' : 'sin detectar'} · Sesión: {agent.authentication === 'verified_by_control' ? 'verificada por control accesible' : 'sin verificar'}</p>}
+      </div>}
+      {controller === 'uia' && !detection.isPending && agent && <p className="hint">Ventana: {agent.window_open == null ? 'sin comprobar' : agent.window_open ? 'abierta' : 'sin identificar'} · Flow: {agent.flow_available == null ? 'sin verificar' : agent.flow_available ? 'detectado' : 'sin detectar'} · Sesión: {agent.authentication === 'verified_by_control' ? 'verificada por control accesible' : 'sin verificar'}</p>}
       <div className="field"><label htmlFor="flow-mode">Controlador</label><select id="flow-mode" className="input" disabled={status.data?.connected} value={status.data?.connected ? status.data.mode : mode} onChange={e => setMode(e.target.value as FlowMode)}>
-        <option value="assisted">Asistido: generar en Flow e importar la descarga</option><option value="browser">Navegador: bot Chromium de My Content (iniciar_flow_bot.cmd)</option><option value="uia">Windows UIA: requiere perfil local verificado</option>
+        <option value="assisted">Asistido: generar en Flow e importar la descarga</option><option value="browser">Navegador: Chromium (Qwen o bot)</option><option value="uia">Windows UIA: requiere perfil local verificado</option>
       </select></div>
+      {controller === 'browser' && <p className="hint">Para imágenes con control visual de Qwen, abre <code>iniciar_qwen_chromium.cmd</code>. Qwen verá la pestaña de Flow mediante tu conexión configurada en Studio. Cierra el bot anterior antes de iniciarlo.</p>}
       {!status.data?.connected && <label className="flow-check"><input type="checkbox" checked={authorized} onChange={e => setAuthorized(e.target.checked)} /> Tengo autorización para usar este controlador con mi sesión.</label>}
       <div className="row"><button className="btn btn-primary" disabled={connect.isPending || (!status.data?.connected && !authorized)} onClick={() => connect.mutate()}>{status.data?.connected ? 'Desconectar y pausar cola' : 'Conectar'}</button>
-        <button className="btn" disabled={detection.isPending} onClick={() => detection.mutate()}>
+        {controller === 'uia' && <><button className="btn" disabled={detection.isPending} onClick={() => detection.mutate()}>
           {detection.isPending && <Loader2 size={16} className="spin" />}{detection.isPending ? 'Detectando…' : 'Detectar Userflex / Flow'}</button>
-        <button className="btn btn-ghost" disabled={detection.isPending || !agent?.window_open} onClick={() => flowApi.focus().catch((e: Error) => toast.error(e.message))}>Enfocar ventana</button></div>
-      <details><summary>Instalación y conexión MCP</summary><p className="muted">Abre <code>iniciar_flow_agente.cmd</code> en Windows. La guía <code>docs/FLOW_AUTOMATION.md</code> explica el diagnóstico, la verificación de controles y la recuperación. El MCP local por stdio incluye Flow; HTTP requiere un token MCP configurado. Sin perfil verificado, utiliza el modo asistido.</p></details>
+        <button className="btn btn-ghost" disabled={detection.isPending || !agent?.window_open} onClick={() => flowApi.focus().catch((e: Error) => toast.error(e.message))}>Enfocar ventana</button></>}</div>
+      <details><summary>Instalación y conexión</summary>{controller === 'browser'
+        ? <p className="muted">Mantén Studio y tu servidor Qwen abiertos. Inicia <code>iniciar_qwen_chromium.cmd</code> para controlar imágenes en Chromium. Consulta <code>docs/QWEN_CHROMIUM.md</code> para el acceso manual y la recuperación.</p>
+        : <p className="muted">La guía <code>docs/FLOW_AUTOMATION.md</code> explica los controladores asistido y Windows UIA.</p>}</details>
     </section>
     <section className="card flow-section flow-form-grid">
       <div className="field"><label htmlFor="flow-project">Proyecto</label><select id="flow-project" className="input" value={projectId} onChange={e => setParams(e.target.value ? { project_id: e.target.value } : {})}><option value="">Selecciona un proyecto</option>{projects.data?.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>

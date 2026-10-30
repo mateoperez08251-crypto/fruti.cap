@@ -14,6 +14,10 @@ para VirtualBox, Cline, el inicio de sesión manual y las pruebas de aceptación
 
 ## Flow Automation (en revisión)
 
+Para que **Qwen controle directamente Chromium** y elija el resultado generado,
+usa `iniciar_qwen_chromium.cmd`. Reutiliza la cola y la importación, con comprobación
+de la descarga frente a las referencias. Consulta [Qwen en Chromium](docs/QWEN_CHROMIUM.md).
+
 Flow es un proveedor adicional con cola persistente, aprobación de imágenes, historial
 por escena y herramientas MCP. Incluye un modo asistido ejecutable con descargas reales
 y un agente Windows UIA que requiere un perfil de controles verificado localmente.

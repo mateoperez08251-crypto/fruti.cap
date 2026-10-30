@@ -12,6 +12,15 @@ const job: FlowJob = { id: 'job', batch_id: 'batch', project_id: 'project', chap
   created_at: '2026-10-23T00:00:00', requested_duration: null, result_metadata: {} }
 
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
+
+it('uses Chromium instructions without invoking the old desktop endpoint', () => {
+  const status = vi.spyOn(flowApi, 'qwenStatus')
+  show({ ...job, execution_mode: 'browser', state: 'queued' })
+  expect(screen.getByText('Qwen en Chromium')).toBeTruthy()
+  expect(screen.getByText(/iniciar_qwen_chromium.cmd/)).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Ejecutar esta toma con Qwen' })).toBeNull()
+  expect(status).not.toHaveBeenCalled()
+})
 function show(value = job) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(<QueryClientProvider client={client}><ToastProvider><FlowResult job={value} refresh={vi.fn()}/></ToastProvider></QueryClientProvider>)

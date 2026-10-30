@@ -12,6 +12,7 @@ export type FlowStatus = {
   agent: FlowAgentStatus
 }
 export type FlowJob = {
+  execution_mode?: FlowMode
   id: string; batch_id: string; project_id: string; chapter_id: string; scene_id: string; title: string
   kind: 'image' | 'video'; state: string; approval: string; error: string; scene_revision: number
   cancel_requested: boolean; remote_stopped: boolean; dependency_id: string | null

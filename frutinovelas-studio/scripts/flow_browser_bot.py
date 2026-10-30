@@ -73,7 +73,7 @@ class StudioAPI:
         request = urllib.request.Request(self.base + path, data=data, method="POST",
                                          headers={"X-Fruti-Flow-Bot": self.key, "Content-Type": content_type})
         try:
-            with self.opener.open(request, timeout=self.timeout) as response:
+            with self.opener.open(request, timeout=210 if path.endswith('/qwen') else self.timeout) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
             detail = error.read().decode("utf-8", "replace")
@@ -84,7 +84,7 @@ class StudioAPI:
             raise RuntimeError(f"Studio rechazó la operación ({error.code}): {detail}") from None
 
     def claim(self):
-        return self._send("/claim", b"{}")
+        return self._send("/claim", json.dumps({"images_only": getattr(self, "images_only", False)}).encode())
 
     def event(self, job_id, event, error="", project_url=None):
         body = {"event": event, "error": error[:1000]}
@@ -97,6 +97,19 @@ class StudioAPI:
         head = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{Path(path).name}\"\r\n"
                 f"Content-Type: application/octet-stream\r\n\r\n").encode()
         body = head + Path(path).read_bytes() + f"\r\n--{boundary}--\r\n".encode()
+        return self._send(f"/jobs/{job_id}/result", body, f"multipart/form-data; boundary={boundary}")
+
+    def qwen(self, job_id, observation, screenshot, history):
+        body = json.dumps({"observation": observation, "screenshot": screenshot, "history": history}, ensure_ascii=False).encode()
+        return self._send(f"/jobs/{job_id}/qwen", body, attempts=1)
+
+    def upload_qwen(self, job_id, path, preview):
+        boundary = uuid.uuid4().hex
+        parts = []
+        for field, source in (("file", path), ("preview", preview)):
+            parts.append((f'--{boundary}\r\nContent-Disposition: form-data; name="{field}"; filename="{field}.png"\r\n'
+                          'Content-Type: application/octet-stream\r\n\r\n').encode() + Path(source).read_bytes() + b'\r\n')
+        body = b''.join(parts) + f'--{boundary}--\r\n'.encode()
         return self._send(f"/jobs/{job_id}/result", body, f"multipart/form-data; boundary={boundary}")
 
 
@@ -245,11 +258,21 @@ def reconcile(api, journal, page, job, workdir):
     return "uncertain"
 
 
-def run_once(api, journal, page_factory, workdir):
+def run_once(api, journal, page_factory, workdir, *, qwen=False):
     job = api.claim()
     action = job.get("action")
     if action in ("idle", "blocked"):
         return action, job.get("detail", "")
+    previous = journal.load(job["request_id"])
+    if qwen or (previous and previous.get("executor") == "browser_qwen"):
+        if job["kind"] != "image":
+            return "blocked", "El control Qwen de Chromium admite imágenes; usa el ejecutor habitual para videos."
+        try:
+            from scripts.flow_qwen_browser import execute
+        except ModuleNotFoundError:
+            from flow_qwen_browser import execute
+        with page_factory() as page:
+            return execute(api, journal, page, job, workdir), job["request_id"]
     with page_factory() as page:
         if action == "submit":
             return submit(api, journal, page, job, workdir), job["request_id"]
@@ -463,6 +486,8 @@ def main(argv=None):
     parser.add_argument("--studio", default="http://127.0.0.1:" + os.environ.get("FRUTINOVELAS_API_PORT", "8765"))
     parser.add_argument("--once", action="store_true", help="Procesa una sola acción y termina")
     parser.add_argument("--poll", type=float, default=15)
+    parser.add_argument("--qwen", action="store_true",
+                        help="Qwen controla la pestaña Chromium con capturas y herramientas DOM; solo imágenes")
     parser.add_argument("--enable-video", action="store_true",
                         help="Permite clips tras verificar a mano los controles de video de Flow")
     args = parser.parse_args(argv)
@@ -499,10 +524,11 @@ def main(argv=None):
                 page.close()
 
     api = StudioAPI(args.studio, key)
+    api.images_only = args.qwen
     try:
         while True:
             try:
-                result, detail = run_once(api, journal, page_factory, workdir)
+                result, detail = run_once(api, journal, page_factory, workdir, qwen=args.qwen)
                 print(json.dumps({"result": result, "detail": detail}, ensure_ascii=False), flush=True)
             except Exception as error:  # Studio offline or browser closed: wait, never resubmit.
                 print(json.dumps({"result": "error", "detail": str(error)}, ensure_ascii=False), flush=True)
